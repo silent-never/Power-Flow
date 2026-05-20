@@ -1,0 +1,12 @@
+Power_Flow/
+├── data/                    # 存放输入数据文件（如 003ieee.txt）
+├── src/                     # 源代码目录
+│   ├── __init__.py
+│   ├── read_data.py         # 数据解析模块
+│   ├── creat_y_bus.py       # 导纳矩阵构建及打印模块
+│   ├── power_mismatch.py    # 功率不平衡量计算模块
+│   ├── calculate_jacobian.py# 雅可比矩阵构建模块
+│   └── Newton_Raphson.py    # 牛顿-拉夫逊迭代主控模块
+├── main.py                  # 主入口脚本
+├── Readme                   # 本说明文件
+└── .venv/                   # Python 虚拟环境
