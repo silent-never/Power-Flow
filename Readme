@@ -1,0 +1,25 @@
+Power_Flow_Pro/
+├── data/                    # 存放输入数据文件（如 003ieee.txt）
+├── src/
+│   ├── core/                # 核心数据模型层（承载电网物理和数学模型）
+│   │   ├── __init__.py
+│   │   ├── grid.py          # PowerGrid 类：封装节点、支路、V、theta、Y矩阵
+│   │   └── math_engine.py   # MathEngine 类：提供底层计算（功率、雅可比）
+│   ├── solvers/             # 求解器层（策略模式，适配各种算法）
+│   │   ├── __init__.py
+│   │   ├── base_solver.py   # BaseSolver 基类：定义求解器的标准接口
+│   │   ├── nr_solver.py     # NewtonRaphsonSolver：标准牛顿法
+│   │   ├── pq_solver.py     # FastDecoupledSolver：PQ分解法
+│   │   ├── cpf_solver.py    # ContinuationSolver：连续潮流法（调用预估和校正）
+│   │   └── tensor_solver.py # TensorSolver：张量法（针对病态潮流）
+│   ├── io/                  # 输入输出层
+│   │   ├── __init__.py
+│   │   ├── parser.py        # 解析 dat/txt，生成 dict/DataFrame
+│   │   └── reporter.py      # 打印报表、绘制 PV 曲线等
+│   └── utils/               # 工具层
+│       ├── __init__.py
+│       └── logger.py        # 统一日志打印，监控条件数、迭代误差
+├── main.py                  # 主程序入口
+└── config.yaml              # 配置文件（收敛精度、最大迭代次数等参数）
+
+
