@@ -1,6 +1,7 @@
 Power_Flow_Pro/
 ├── data/                    # 存放输入数据文件（如 003ieee.txt）
 ├── src/
+│   ├── __init__.py    
 │   ├── core/                # 核心数据模型层（承载电网物理和数学模型）
 │   │   ├── __init__.py
 │   │   ├── grid.py          # PowerGrid 类：封装节点、支路、V、theta、Y矩阵

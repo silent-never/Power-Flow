@@ -9,25 +9,28 @@ class ResultReporter:
 
     def print_node_results(self, info=None):
         """打印潮流计算终端结果表"""
-        print("\n" + "="*55)
+        print("\n" + "=" * 60)
         print("                 潮流计算最终结果")
-        print("-"*55)
+        print("-" * 60)
         
         if info:
             print(f"迭代次数: {info['iterations']}")
             print(f"总耗时  : {info['time_elapsed']:.4f} 秒")
-            print("-" * 55)
+            print("-" * 60)
 
-        print(f"{'节点':<8}{'电压 V(pu)':>12}{'相角 θ(deg)':>12}{'P计算(pu)':>12}{'Q计算(pu)':>12}")
-        print("-" * 55)
+        # 表头宽度：节点左对齐8，其余右对齐12（含小数点及符号）
+        header = (f"{'节点':<8}" f"{'电压 V.pu':<12}" f"{'相角 θ.deg':<12}"
+                f"{'有功 P.pu':<12}" f"{'无功 Q.pu':<12}")
+        print(header)
+        print("-" * 60)
 
         theta_deg = np.degrees(self.grid.theta)
         
         for i, bus in enumerate(self.grid.buses):
             bus_num = bus['number']
-            print(f"{bus_num:<8}{self.grid.V[i]:>12.4f}{theta_deg[i]:>12.4f}"
-                  f"{self.grid.P_calc[i]:>12.4f}{self.grid.Q_calc[i]:>12.4f}")
-        print("="*55 + "\n")
+            print(f"{bus_num:<6}{self.grid.V[i]:>12.4f}{theta_deg[i]:>14.4f}"
+                  f"{self.grid.P_calc[i]:>14.4f}{self.grid.Q_calc[i]:>14.4f}")
+        print("="*60 + "\n")
 
     def check_voltage_thresholds(self, v_max=1.05, v_min=0.95):
         """检查系统中是否存在电压越限的节点"""

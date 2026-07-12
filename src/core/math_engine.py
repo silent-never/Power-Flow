@@ -1,5 +1,7 @@
 import numpy as np
 
+import numpy as np
+
 def build_y_bus(buses, branches, idx_map):
     """
     构建节点导纳矩阵 Y_bus 
@@ -14,14 +16,16 @@ def build_y_bus(buses, branches, idx_map):
         B_shunt = bus.get('b_shunt', 0.0)
         Y[i][i] += G_shunt + 1j * B_shunt
 
-    # 2. 处理支路（串联阻抗与对地充电电容）
-    for branch in branches:
-        i = idx_map[branch['from_bus']]
-        j = idx_map[branch['to_bus']]
+    # 2. 处理支路（串联阻抗与对地充电电容、变压器变比）
+    for br in branches:
+        i = idx_map[br['from_bus']]
+        j = idx_map[br['to_bus']]
         
-        r = branch.get('r', 0.0)
-        x = branch.get('x', 0.0)
-        b = branch.get('b', 0.0) # 线路充电电纳
+        r = br.get('r', 0.0)
+        x = br.get('x', 0.0)
+        b = br.get('b', 0.0)             # 线路充电电纳
+        br_type = br.get('type', 1)      # 1=线路, 2=变压器
+        tap = br.get('final_ratio', 1.0) # 变压器变比（标幺值）
         
         # 串联导纳
         z = r + 1j * x
@@ -31,14 +35,26 @@ def build_y_bus(buses, branches, idx_map):
             y_series = 1.0 / z
             
         # 填充非对角元和对角元
-        Y[i][j] -= y_series
-        Y[j][i] -= y_series
-        Y[i][i] += y_series + 1j * (b / 2.0)
-        Y[j][j] += y_series + 1j * (b / 2.0)
-        
-        # 注意：如果是变压器(含非标准变比 ratio)，需要在这里扩展逻辑
-        # Y[i][i] += y_series / (ratio**2)
-        # Y[i][j] -= y_series / ratio  ... 等等
+        if br_type == 2 and tap != 1.0:
+            if tap == 0:
+                print(f"Warning: Transformer branch {br['from_bus']}->{br['to_bus']} has tap=0, set to 1")
+                tap = 1.0
+            # 变压器模型：变比放在 from_bus 侧
+            Y[i][i] += y_series / (tap * tap)
+            Y[j][j] += y_series
+            Y[i][j] -= y_series / tap
+            Y[j][i] -= y_series / tap
+        else:
+            # 普通线路模型
+            Y[i][i] += y_series
+            Y[j][j] += y_series
+            Y[i][j] -= y_series
+            Y[j][i] -= y_series
+            
+        # 处理充电电纳（平分到两端）
+        if b != 0.0:
+            Y[i][i] += 1j * b / 2.0
+            Y[j][j] += 1j * b / 2.0
 
     return Y
 

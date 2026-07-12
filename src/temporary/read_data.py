@@ -33,7 +33,7 @@ def parse_dat_txt(file_path):
     bus_fields = [
         'number', 'name', 'useless_num',
         'area', 'zone', 'type',
-        'v_final', 'angle',
+        'v_final', 'angle_final',
         'load_mw', 'load_mvar',
         'gen_mw', 'gen_mvar',
         'base_kv', 'v_desired',
@@ -43,7 +43,7 @@ def parse_dat_txt(file_path):
     ]
         # 一般大多无用，仅number，type，base_kv，v_desired为计算初值，
         # load_mw，load_mvar，gen_mw，gen_mvar为计算用
-        # max_q_v，max_q_v为计算限制，v_final，angle为已知计算结果，
+        # max_q_v，max_q_v为计算限制，v_final，angle_final为已知计算结果，
         # type可能为空，1=PQ, 2=PV, 3=平衡
 
 

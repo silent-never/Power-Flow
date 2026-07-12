@@ -46,7 +46,7 @@ class PowerGrid:
             
             # 设置初值
             self.V[i] = bus.get('v_final', 1.0)
-            self.theta[i] = np.radians(bus.get('angle', 0.0))
+            self.theta[i] = np.radians(bus.get('angle_final', bus.get('angle', 0.0)))
             
             # 标幺化给定功率：P_spec = (P_gen - P_load) / S_base
             p_gen = bus.get('gen_mw', 0.0)

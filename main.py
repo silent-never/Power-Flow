@@ -3,12 +3,12 @@ import os
 import sys
 import time
 from pathlib import Path
-
+# 设置项目根目录，确保自定义模块可以被正确导入
 PROJECT_ROOT = Path(__file__).resolve().parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-# 导入我们精心设计的各个模块
+# 导入自定义模块
 from src.io.parser import parse_dat_txt
 from src.core.grid import PowerGrid
 from src.solvers.nr_solver import NewtonRaphsonSolver
@@ -16,11 +16,12 @@ from src.io.reporter import ResultReporter
 from src.io.plotter import GridPlotter
 
 def main():
+    
     print("=" * 60)
     print("                 Power_Flow - 潮流计算与可视化工具")
     
-    # 1. 设定测试用例（你可以随时换成 009ieee.txt 或 039ieee.txt）
-    file_path = "data/039ieee.txt"  # 请确保 data 文件夹下有这个文件
+    # 1. 设定测试用例
+    file_path = "data/003ieee.txt"  # 请确保 data 文件夹下有这个文件
     
     if not os.path.exists(file_path):
         print(f"[错误] 找不到数据文件: {file_path}")
