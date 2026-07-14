@@ -1,0 +1,83 @@
+"""Application configuration utilities.
+
+The project configuration deliberately uses a small, flat YAML subset so it
+can be read without adding a YAML dependency to this learning project.
+"""
+
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any
+
+@dataclass
+class SolverConfig:
+    data_file: str = "data/039ieee.txt"
+    base_mva: float = 100.0
+    algorithm: str = "nr"
+    tolerance: float = 1e-6
+    max_iterations: int = 20
+    plot_dir: str = "output/plots"
+    run_loadability_scan: bool = True
+    load_multiplier_start: float = 1.0
+    load_multiplier_stop: float = 3.0
+    load_multiplier_step: float = 0.1
+    load_refinement_tolerance: float = 1e-4
+    load_scan_max_iterations: int = 50
+
+
+def _parse_scalar(value: str) -> Any:
+    """Parse a scalar value used by the project's flat YAML file."""
+    value = value.strip()
+    if not value:
+        return ""
+    if value[0:1] in {"'", '"'} and value[-1:] == value[0]:
+        return value[1:-1]
+    if value.lower() in {"true", "false"}:
+        return value.lower() == "true"
+    try:
+        return int(value)
+    except ValueError:
+        try:
+            return float(value)
+        except ValueError:
+            return value
+
+
+def load_config(path: str | Path = "config.yaml") -> SolverConfig:
+    """Load the project's flat YAML configuration file."""
+    config_path = Path(path)
+    if not config_path.exists():
+        raise FileNotFoundError(f"配置文件不存在: {config_path}")
+
+    values: dict[str, Any] = {}
+    for line_number, raw_line in enumerate(
+        config_path.read_text(encoding="utf-8").splitlines(), start=1
+    ):
+        line = raw_line.split("#", maxsplit=1)[0].strip()
+        if not line:
+            continue
+        if ":" not in line:
+            raise ValueError(f"配置文件第 {line_number} 行缺少 ':'")
+        key, value = line.split(":", maxsplit=1)
+        values[key.strip()] = _parse_scalar(value)
+
+    return load_from_dict(values)
+
+
+def load_from_dict(values: dict[str, Any]) -> SolverConfig:
+    """Build and validate a solver configuration from a mapping."""
+    config = SolverConfig(**values)
+    if config.base_mva <= 0:
+        raise ValueError("base_mva must be positive")
+    if config.tolerance <= 0:
+        raise ValueError("tolerance must be positive")
+    if config.max_iterations <= 0:
+        raise ValueError("max_iterations must be positive")
+    if config.load_multiplier_start <= 0:
+        raise ValueError("load_multiplier_start must be positive")
+    if config.load_multiplier_stop <= config.load_multiplier_start:
+        raise ValueError("load_multiplier_stop must exceed load_multiplier_start")
+    if config.load_multiplier_step <= 0 or config.load_refinement_tolerance <= 0:
+        raise ValueError("load scan step and refinement tolerance must be positive")
+    if config.load_scan_max_iterations <= 0:
+        raise ValueError("load_scan_max_iterations must be positive")
+    return config

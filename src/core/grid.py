@@ -1,8 +1,8 @@
 # src/core/grid.py
 import copy
-import sys
 import numpy as np
-from src.core.math_engine import build_y_bus, calc_mismatch, build_jacobian
+
+from .math_engine import build_jacobian, build_y_bus, calc_mismatch
 
 class PowerGrid:
     """

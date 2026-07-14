@@ -1,15 +1,9 @@
 # src/solvers/nr_solver.py
-import sys
 import time
-from pathlib import Path
 
 import numpy as np
 
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
-if str(PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(PROJECT_ROOT))
-
-from src.solvers.base_solver import BaseSolver
+from .base_solver import BaseSolver
 
 class NewtonRaphsonSolver(BaseSolver):
     """
@@ -26,7 +20,8 @@ class NewtonRaphsonSolver(BaseSolver):
             'condition_numbers': []  # 预留给病态潮流：记录雅可比矩阵条件数
         }
 
-        print("开始牛顿-拉夫逊迭代...")
+        if self.verbose:
+            print("开始牛顿-拉夫逊迭代...")
         
         for it in range(self.max_iter):
             # 1. 获取当前状态下的功率不平衡量 (dP = P_spec - P_calc)
@@ -38,12 +33,14 @@ class NewtonRaphsonSolver(BaseSolver):
             max_error = max(max_dP, max_dQ)
             info['max_error_history'].append(max_error)
             
-            print(f"Iter {it:2d}: max|dP| = {max_dP:.6e}, max|dQ| = {max_dQ:.6e}")
+            if self.verbose:
+                print(f"Iter {it:2d}: max|dP| = {max_dP:.6e}, max|dQ| = {max_dQ:.6e}")
             
             if max_error < self.tol:
                 info['iterations'] = it
                 info['time_elapsed'] = time.perf_counter() - start_time
-                print(f"潮流计算在第 {it} 次迭代成功收敛！耗时: {info['time_elapsed']:.4f}秒")
+                if self.verbose:
+                    print(f"潮流计算在第 {it} 次迭代成功收敛！耗时: {info['time_elapsed']:.4f}秒")
                 return True, info
 
             # 3. 获取你定义的雅可比矩阵
@@ -73,5 +70,6 @@ class NewtonRaphsonSolver(BaseSolver):
         # 达到最大迭代次数仍未收敛
         info['iterations'] = self.max_iter
         info['time_elapsed'] = time.perf_counter() - start_time
-        print(f"未能收敛！在达到最大迭代次数 {self.max_iter} 时发散。")
+        if self.verbose:
+            print(f"未能收敛！在达到最大迭代次数 {self.max_iter} 时发散。")
         return False, info

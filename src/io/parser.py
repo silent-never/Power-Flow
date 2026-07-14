@@ -14,6 +14,7 @@ def safe_int(s, default=0):
             return default
 
 def special_type_deal(parts, type_idx):
+    """将错误失去位置的类型1增添其中"""
     if len(parts) > type_idx - 1:
         try:
             int(parts[type_idx - 1])  # 尝试转换为整数
@@ -61,7 +62,7 @@ def parse_dat_txt(file_path):
         'to_bus',        # 终止母线编号（整数）
         'area',          # 区域编号（整数，用于经济调度分区）
         'zone',          # 供电分区编号（整数，比area更细的子区域）
-        'type',          # 支路类型（1=输电线路, 2=固定变压器, 3=移相变压器）
+        'type',          # 支路类型（1=输电线路, 2=固定变压器, 4=移相变压器）
         'r',             # 串联电阻（标幺值 p.u.）
         'x',             # 串联电抗（标幺值 p.u.）
         'b',             # 总充电电纳（标幺值 p.u.；线路为对地电容，变压器通常为0）

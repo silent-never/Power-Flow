@@ -1,15 +1,15 @@
 # src/solvers/base_solver.py
 from abc import ABC, abstractmethod
-import time
 
 class BaseSolver(ABC):
     """
     潮流求解器抽象基类
     所有具体的求解器算法都应继承此类，并实现 solve 方法。
     """
-    def __init__(self, tol=1e-6, max_iter=20):
+    def __init__(self, tol=1e-6, max_iter=20, verbose=True):
         self.tol = tol
         self.max_iter = max_iter
+        self.verbose = verbose
         
     @abstractmethod
     def solve(self, grid):

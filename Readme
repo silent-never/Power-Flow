@@ -1,26 +1,99 @@
-Power_Flow_Pro/
-├── data/                    # 存放输入数据文件（如 003ieee.txt）
-├── src/
-│   ├── __init__.py    
-│   ├── core/                # 核心数据模型层（承载电网物理和数学模型）
-│   │   ├── __init__.py
-│   │   ├── grid.py          # PowerGrid 类：封装节点、支路、V、theta、Y矩阵
-│   │   └── math_engine.py   # MathEngine 类：提供底层计算（功率、雅可比）
-│   ├── solvers/             # 求解器层（策略模式，适配各种算法）
-│   │   ├── __init__.py
-│   │   ├── base_solver.py   # BaseSolver 基类：定义求解器的标准接口
-│   │   ├── nr_solver.py     # NewtonRaphsonSolver：标准牛顿法
-│   │   ├── pq_solver.py     # FastDecoupledSolver：PQ分解法
-│   │   ├── cpf_solver.py    # ContinuationSolver：连续潮流法（调用预估和校正）
-│   │   └── tensor_solver.py # TensorSolver：张量法（针对病态潮流）
-│   ├── io/                  # 输入输出层
-│   │   ├── __init__.py
-│   │   ├── parser.py        # 解析 dat/txt，生成 dict/DataFrame
-│   │   └── reporter.py      # 打印报表、绘制 PV 曲线等
-│   └── utils/               # 工具层
-│       ├── __init__.py
-│       └── logger.py        # 统一日志打印，监控条件数、迭代误差
-├── main.py                  # 主程序入口
-└── config.yaml              # 配置文件（收敛精度、最大迭代次数等参数）
+这是我正在自己写的潮流计算的Py代码，目的是学习潮流计算基本内容与稳定极限相关性质，并复现论文数据。
 
+Power_Flow_Pro/
+│
+├── data/                           # 平铺存放 IEEE 输入数据
+│   ├── 003ieee.txt                 # IEEE 3节点测试系统
+│   ├── …………
+│   └── 300ieee.txt                 # IEEE 300节点测试系统
+│
+├── src/
+│   ├── __init__.py
+│   ├── core/                   # 核心模型层（描述电网物理模型与数学模型）
+│   │   ├── __init__.py
+│   │   ├── grid.py                 # PowerGrid类，电网对象封装：
+│   │   │                               # - 节点/支路拓扑信息
+│   │   │                               # - 节点类型(PQ/PV/Slack)
+│   │   │                               # - 电压幅值V与相角theta
+│   │   │                               # - 功率给定值P_spec/Q_spec
+│   │   │                               # - 当前运行状态变量
+│   │   └── math_engine.py          # 潮流数学计算核心
+│   │                                   # - Ybus矩阵构造
+│   │                                   # - 节点功率计算
+│   │                                   # - 功率不平衡计算
+│   │                                   # - 雅可比矩阵构造
+│   │                                   # - 灵敏度相关计算
+│
+│   ├── solvers/                # 数值求解器层（统一求解接口）
+│   │   ├── __init__.py
+│   │   ├── base_solver.py          # 求解器抽象基类：定义统一solve接口
+│   │   ├── nr_solver.py                # NewtonRaphsonSolver 标准牛顿-拉夫逊潮流计算
+│   │   │                               # 用于基础潮流求解与结果校验
+│   │   ├── pq_solver.py            # FastDecoupledSolver 快速解耦潮流算法
+│   │   │                               # 提高大规模系统计算效率
+│   │   ├── cpf_solver.py           # ContinuationSolver 连续潮流计算
+│   │   │                               # - 预测步(Predictor)
+│   │   │                               # - 校正步(Corrector)
+│   │   │                               # - 负荷参数延拓
+│   │   └── tensor_solver.py        # TensorSolver
+│   │                                   # 张量法潮流求解
+│   │                                   # 用于病态潮流和临界状态分析
+│
+│   ├── cpf/                    # 连续潮流专用模块
+│   │   ├── __init__.py
+│   │   ├── predictor.py            # CPF预测模块：求解状态变量变化方向
+│   │   ├── corrector.py            # CPF校正模块：扩展牛顿法修正预测结果
+│   │   ├── parameter.py            # 延拓参数管理：管理lambda、步长等参数
+│   │   └── step_control.py         # 自适应步长控制：根据收敛情况调整延拓步长
+│
+│   ├── analysis/               # 潮流分析工作流
+│   │   └── loadability.py          # CPF 前的统一 P/Q 负荷倍率扫描
+│
+│   ├── io/                     # 输入输出层
+│   │   ├── __init__.py
+│   │   ├── parser.py               # 数据解析模块
+│   │   │                               # 解析IEEE DAT/TXT格式
+│   │   │                               # 生成内部节点与支路模型
+│   │   ├── pf_reporter.py          # 基础潮流结果输出
+│   │   │                               # - 节点电压、相角
+│   │   │                               # - P/Q功率
+│   │   │                               # - 越限检测
+│   │   └── cpf_reporter.py         # 连续潮流结果输出
+│   │                                   # - PV曲线数据
+│   │                                   # - 临界点信息
+│   │                                   # - 电压稳定裕度
+│   ├── visualization/          # 可视化模块
+│   │   ├── __init__.py
+│   │   ├── pf_plotter.py           # 基础潮流绘图：电压、相角、功率对比图
+│   │   └── cpf_plotter.py          # 连续潮流绘图
+│   │                                   # PV曲线
+│   │                                   # 雅可比特征值变化曲线
+│   │                                   # 稳定裕度曲线
+│
+│   ├── saves/                  # 保留的绘图与存档辅助内容
+│   ├── temporary/              # 保留的临时研究与过渡内容
+│
+│   └── utils/                  # 通用工具模块
+│       ├── __init__.py
+│       ├── logger.py              # 日志管理记录：
+│       │                               # - 迭代过程
+│       │                               # - 收敛误差
+│       │                               # - 条件数变化
+│       └── config.py              # 参数配置管理
+│                                       # 管理求解精度、迭代次数等
+│
+├── main.py                        # 程序入口
+│                                   # - 数据加载
+│                                   # - 模型初始化
+│                                   # - 求解器调用
+│                                   # - 结果输出
+│
+└── config.yaml                    # 全局配置文件
+                                    # - 收敛精度
+                                    # - 最大迭代次数
+                                    # - 求解算法选择
+                                    # - CPF参数设置
+
+当前状态：Newton-Raphson 基础潮流、IEEE 数据解析、基础报表、PF 绘图和统一负荷倍率扫描可用。
+FastDecoupledSolver、ContinuationSolver、TensorSolver 及 CPF 专用绘图仍为待实现接口。
 

@@ -1,0 +1,15 @@
+# Python cache and local environments
+__pycache__/
+*.py[cod]
+.venv/
+
+# Test and tool caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Local IDE state
+.idea/workspace.xml
+
+# Generated output
+output/

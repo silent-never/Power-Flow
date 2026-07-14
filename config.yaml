@@ -1,0 +1,15 @@
+# Power-Flow 全局配置（当前使用扁平 YAML 格式）
+data_file: data/057ieee.txt
+base_mva: 100.0
+algorithm: nr
+tolerance: 1e-6
+max_iterations: 20
+plot_dir: output/plots
+
+# CPF 前的统一负荷倍率扫描
+run_loadability_scan: true
+load_multiplier_start: 1.0
+load_multiplier_stop: 3.0
+load_multiplier_step: 0.1
+load_refinement_tolerance: 1e-4
+load_scan_max_iterations: 50
