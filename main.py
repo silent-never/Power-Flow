@@ -1,143 +1,168 @@
-# main.py
+"""Power-Flow 项目的 CPF 连续潮流入口。"""
+
 from pathlib import Path
 
-# 导入自定义模块
-from src.analysis.loadability import scan_loadability
-from src.io.parser import parse_dat_txt
 from src.core.grid import PowerGrid
-from src.solvers.nr_solver import NewtonRaphsonSolver
-from src.io.pf_reporter import ResultReporter
+from src.cpf.parameter import CPFParameter
+from src.io.parser import parse_dat_txt
+from src.solvers.cpf_solver import ContinuationSolver
 from src.utils.config import load_config
-from src.visualization.pf_plotter import PFPlotter
+from src.visualization.cpf_plotter import CPFPlotter
+
 
 PROJECT_ROOT = Path(__file__).resolve().parent
 
 
+def create_cpf_parameters(config):
+    """将全局配置转换为 CPF 专用参数。"""
+    return CPFParameter(
+        lambda_init=config.cpf_lambda_init,
+        lambda_min=config.cpf_lambda_min,
+        lambda_max=config.cpf_lambda_max,
+        step_size=config.cpf_step_size,
+        min_step=config.cpf_min_step,
+        max_step=config.cpf_max_step,
+        step_increase_factor=config.cpf_step_increase_factor,
+        step_decrease_factor=config.cpf_step_decrease_factor,
+        fast_convergence_iters=config.cpf_fast_convergence_iters,
+        slow_convergence_iters=config.cpf_slow_convergence_iters,
+        max_step_retries=config.cpf_max_step_retries,
+        corrector_tol=config.cpf_corrector_tolerance,
+        max_corrector_iters=config.cpf_max_corrector_iterations,
+        max_steps=config.cpf_max_steps,
+        post_nose_steps=config.cpf_post_nose_steps,
+        parameterization=config.cpf_parameterization,
+        initial_direction=config.cpf_initial_direction,
+        enforce_q_limits=config.cpf_enforce_q_limits,
+        tangent_angle_bus=config.cpf_tangent_angle_bus,
+        tangent_angle_refinement=config.cpf_tangent_angle_refinement,
+        tangent_angle_refinement_cos_threshold=(
+            config.cpf_tangent_angle_refinement_cos_threshold
+        ),
+        tangent_angle_refinement_min_step_ratio=(
+            config.cpf_tangent_angle_refinement_min_step_ratio
+        ),
+        tangent_angle_pseudo_fallback=(
+            config.cpf_tangent_angle_pseudo_fallback
+        ),
+        absolute_vp_angle_bus=config.cpf_absolute_vp_angle_bus,
+        absolute_vp_angle_pseudo_fallback=(
+            config.cpf_absolute_vp_angle_pseudo_fallback
+        ),
+    )
+
+
+def print_cpf_summary(cpf_success, cpf_result, grid):
+    """输出 CPF 计算状态和鼻点摘要。"""
+    print("\n" + "=" * 64)
+    print("                    CPF 连续潮流结果")
+    print("-" * 64)
+    print(f"计算状态       : {'成功' if cpf_success else '未完成'}")
+    print(f"停止原因       : {cpf_result.stop_reason}")
+    print(f"参数化方式     : {cpf_result.parameterization}")
+    print(
+        f"PV→PQ 转换    : "
+        f"{'开启' if cpf_result.enforce_q_limits else '关闭'}"
+    )
+    if cpf_result.tangent_angle_bus is not None:
+        print(f"P–V 切线角母线 : {cpf_result.tangent_angle_bus}")
+    if cpf_result.absolute_vp_angle_bus is not None:
+        print(f"绝对 V/P 角母线: {cpf_result.absolute_vp_angle_bus}")
+    print(
+        f"伪弧长自动接管 : "
+        f"{'是' if cpf_result.used_pseudo_fallback else '否'}"
+    )
+    print(f"收敛轨迹点数   : {len(cpf_result.points)}")
+    print(f"失败尝试次数   : {cpf_result.failed_attempts}")
+    print(f"总耗时         : {cpf_result.time_elapsed:.4f} 秒")
+
+    if cpf_result.points:
+        nose = cpf_result.nose_point
+        base_load_mw = sum(
+            float(bus.get("load_mw", 0.0)) for bus in grid.buses
+        )
+        base_load_mvar = sum(
+            float(bus.get("load_mvar", 0.0)) for bus in grid.buses
+        )
+        print("-" * 64)
+        print(f"鼻点所在步数   : {nose.step_index}")
+        print(f"鼻点 λ         : {nose.lambda_value:.8f}")
+        print(f"鼻点负荷倍率   : {nose.load_multiplier:.8f}")
+        print(
+            f"鼻点总负荷     : "
+            f"{base_load_mw * nose.load_multiplier:.2f} MW / "
+            f"{base_load_mvar * nose.load_multiplier:.2f} Mvar"
+        )
+        print(
+            f"鼻点 PQ 最低电压: {nose.min_pq_voltage:.6f} p.u. "
+            f"(母线 {nose.min_pq_voltage_bus})"
+        )
+        print(
+            f"鼻点 PQ 最大压降: "
+            f"{nose.max_pq_voltage_drop_ratio:.4%} "
+            f"(母线 {nose.max_pq_voltage_drop_bus or '无'})"
+        )
+        limited_buses = nose.q_limited_buses
+        print(
+            f"鼻点无功越限母线: "
+            f"{', '.join(map(str, limited_buses)) if limited_buses else '无'}"
+        )
+        if nose.pv_tangent_angle_deg is not None:
+            print(f"鼻点 P–V 切线角: {nose.pv_tangent_angle_deg:.4f}°")
+        if nose.absolute_vp_angle_deg is not None:
+            print(f"鼻点绝对 V/P 角: {nose.absolute_vp_angle_deg:.4f}°")
+        print(f"鼻点雅可比条件数: {nose.jacobian_condition_number:.6e}")
+    print("=" * 64)
+
+
+def run_cpf(grid, config):
+    """运行连续潮流并返回求解结果。"""
+    solver = ContinuationSolver(
+        params=create_cpf_parameters(config),
+        tol=config.cpf_corrector_tolerance,
+        max_iter=config.max_iterations,
+        verbose=config.cpf_verbose,
+    )
+    return solver.solve(grid)
+
+
 def main():
+    """读取测试系统、执行 CPF、输出结果并绘制分析曲线。"""
     config = load_config(PROJECT_ROOT / "config.yaml")
-    
-    print("=" * 60)
-    print("                 Power_Flow - 潮流计算与可视化工具")
-    
-    # 1. 设定测试用例
     file_path = PROJECT_ROOT / config.data_file
-    
+
+    print("=" * 64)
+    print("                  Power-Flow CPF 连续潮流")
+    print("=" * 64)
+
     if not file_path.exists():
         print(f"[错误] 找不到数据文件: {file_path}")
         return
 
-    # 2. IO层：解析数据
-    print(f"\n[1/5] 正在解析数据文件: {file_path} ...")
+    print(f"\n[1/4] 正在解析测试系统: {file_path}")
     buses, branches = parse_dat_txt(file_path)
-    print(f"      -> 成功读取 {len(buses)} 条母线，{len(branches)} 条支路")
+    print(f"      已读取 {len(buses)} 条母线、{len(branches)} 条支路")
 
-    # 3. 核心层：建立电网模型 (初始化 V, theta, Y_bus 等)
-    print("\n[2/5] 正在构建系统拓扑与数学模型 ...")
+    print("\n[2/4] 正在建立电网模型 ...")
     grid = PowerGrid(buses, branches, base_mva=config.base_mva)
 
-    # 4. 求解器层：牛顿-拉夫逊迭代计算
-    print("\n[3/5] 开始启动牛顿-拉夫逊求解器 ...")
-    # 这里可以轻松修改精度和最大迭代次数
-    if config.algorithm != "nr":
-        raise ValueError(f"当前入口尚不支持求解器: {config.algorithm}")
-    solver = NewtonRaphsonSolver(
-        tol=config.tolerance,
-        max_iter=config.max_iterations,
-    )
-    
-    # 核心计算
-    success, info = solver.solve(grid)
+    if not config.run_cpf:
+        print("\n[停止] config.yaml 中的 run_cpf 为 false")
+        return
 
-    # 5. IO层：结果输出与后处理
-    print("\n[4/5] 正在生成结果报表 ...")
-    reporter = ResultReporter(grid)
-    
-    if success:
-        # 打印节点结果表
-        reporter.print_node_results(info)
-        # 执行电压越限检测 (比如上限 1.05, 下限 0.95)
-        # reporter.check_voltage_thresholds(v_max=1.05, v_min=0.95)
-        
-        # 绘图模块
-        print("\n[6/6] 正在绘制可视化图像 ...")
-        plotter = PFPlotter(save_dir=PROJECT_ROOT / config.plot_dir)
+    print("\n[3/4] 正在执行 CPF 预测—校正计算 ...")
+    cpf_success, cpf_result = run_cpf(grid, config)
+    print_cpf_summary(cpf_success, cpf_result, grid)
 
-        # 四类对比图：
-        # 1) 电压 vs v_final
-        # 2) 相角 vs angle_final
-        # 3) 有功 vs P_spec
-        # 4) 非PQ节点无功 vs Q_spec
-        plotter.plot_all_comparisons(
-            grid,
-            v_tol=0.02,      # 电压偏差阈值
-            angle_tol=2.0,   # 相角偏差阈值（deg）
-            p_tol=0.02,      # 有功偏差阈值（p.u.）
-            q_tol=0.02,      # 无功偏差阈值（p.u.）
-            prefix="IEEE"
-        )
-        # 5) 与标准数据的偏差
-        plotter.plot_deviation_outliers_summary(
-            grid,
-            v_tol=0.02,
-            angle_tol=2.0,
-            p_tol=0.02,
-            q_tol=0.02,
-            save_name="IEEE_05_Deviation_Outliers_Summary.png"
-        )
-        # 6) 画收敛特性曲线
-        plotter.plot_convergence(info, algo_name="Newton-Raphson", save_name="IEEE_06_Convergence.png")
-
-        if config.run_loadability_scan:
-            print("\n[负荷扫描] 开始统一放大全部母线的 P/Q 负荷 ...")
-            loadability = scan_loadability(
-                grid,
-                start=config.load_multiplier_start,
-                stop=config.load_multiplier_stop,
-                step=config.load_multiplier_step,
-                refinement_tolerance=config.load_refinement_tolerance,
-                tolerance=config.tolerance,
-                max_iterations=config.load_scan_max_iterations,
-            )
-            plotter.plot_loadability_curve(loadability)
-
-            bracket = loadability.collapse_bracket
-            if bracket is None:
-                print(
-                    f">>> 扫描至 {config.load_multiplier_stop:.3f} 倍仍未发现不收敛点，"
-                    "请增大 load_multiplier_stop。"
-                )
-            else:
-                stable, failed = bracket
-                stable_point = max(
-                    (point for point in loadability.points if point.converged),
-                    key=lambda point: point.multiplier,
-                )
-                print(
-                    f">>> 最后收敛倍率: {stable:.4f} "
-                    f"(总负荷约 {loadability.base_load_mw * stable:.2f} MW / "
-                    f"{loadability.base_load_mvar * stable:.2f} Mvar)"
-                )
-                print(
-                    f">>> 此时最低电压: {stable_point.min_voltage:.4f} p.u. "
-                    f"(母线 {stable_point.min_voltage_bus})"
-                )
-                print(
-                    f">>> 首个不收敛倍率: {failed:.4f} "
-                    f"(总负荷约 {loadability.base_load_mw * failed:.2f} MW / "
-                    f"{loadability.base_load_mvar * failed:.2f} Mvar)"
-                )
-                print(
-                    ">>> 该区间是普通潮流的数值崩溃边界，以后可用 CPF 精确追踪鼻点。"
-                )
-
-        print(f"\n>>> 所有计算与绘图任务已完成！请查看 {config.plot_dir} 文件夹。")
-        
+    if cpf_result.points:
+        print("\n[4/4] 正在绘制 CPF 分析曲线 ...")
+        plotter = CPFPlotter(PROJECT_ROOT / config.plot_dir)
+        monitor_bus = config.cpf_monitor_bus or None
+        output_files = plotter.plot_all(cpf_result, bus_number=monitor_bus)
+        print(f">>> 已生成 {len(output_files)} 张 CPF 图像")
+        print(f">>> 输出目录: {PROJECT_ROOT / config.plot_dir}")
     else:
-        # 如果发散（病态潮流），也会保存当时的误差曲线用于分析
-        print("\n[警告] 潮流计算未能收敛！正在生成发散特征分析图...")
-        plotter = PFPlotter(save_dir=PROJECT_ROOT / config.plot_dir)
-        plotter.plot_convergence(info, algo_name="Newton-Raphson_Diverged", save_name="Divergence_Trend.png")
-        print(">>> 建议检查系统的病态程度（如条件数）或尝试其他求解器（如张量法）。")
+        print("\n[4/4] 没有收敛轨迹点，跳过 CPF 绘图")
 
 
 if __name__ == "__main__":

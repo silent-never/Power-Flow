@@ -1,5 +1,5 @@
 # Power-Flow 全局配置（当前使用扁平 YAML 格式）
-data_file: data/057ieee.txt
+data_file: data/118ieee.txt
 base_mva: 100.0
 algorithm: nr
 tolerance: 1e-6
@@ -10,6 +10,45 @@ plot_dir: output/plots
 run_loadability_scan: true
 load_multiplier_start: 1.0
 load_multiplier_stop: 3.0
-load_multiplier_step: 0.1
+load_multiplier_step: 0.01
 load_refinement_tolerance: 1e-4
 load_scan_max_iterations: 50
+
+# 连续潮流计算
+run_cpf: true
+# 可选 natural、pseudo_arclength、tangent_angle、absolute_vp_angle
+cpf_parameterization: natural
+cpf_lambda_init: 0.0
+cpf_lambda_min: -0.99
+cpf_lambda_max: 2.0
+cpf_step_size: 0.01
+cpf_min_step: 1e-4
+cpf_max_step: 0.05
+cpf_step_increase_factor: 1.25
+cpf_step_decrease_factor: 0.5
+cpf_fast_convergence_iters: 4
+cpf_slow_convergence_iters: 15
+cpf_max_step_retries: 8
+cpf_corrector_tolerance: 1e-8
+cpf_max_corrector_iterations: 15
+cpf_max_steps: 500
+cpf_post_nose_steps: 20
+cpf_initial_direction: 1
+# 是否在发电机无功越限后将 PV 母线单向转换为 PQ
+cpf_enforce_q_limits: true
+# P–V 切线角监测母线；0 表示自动选择电压最敏感的 PQ 母线
+cpf_tangent_angle_bus: 0
+# 鼻点加密：|cosφ| 小于阈值后对两种角度参数化自动缩小步长
+cpf_tangent_angle_refinement: true
+cpf_tangent_angle_refinement_cos_threshold: 0.35
+# 鼻点处局部步长不低于 cpf_max_step 的这一比例
+cpf_tangent_angle_refinement_min_step_ratio: 0.02
+# P–V 投影无法跨越相角型鼻点时，自动切换伪弧长继续跟踪
+cpf_tangent_angle_pseudo_fallback: true
+# 绝对 V/P 角参数化母线；供 cpf_parameterization: absolute_vp_angle 使用
+# 角度定义为 α=atan2(V, P/P0)，0 表示自动选择电压最敏感的 PQ 母线
+cpf_absolute_vp_angle_bus: 0
+cpf_absolute_vp_angle_pseudo_fallback: true
+# 设为 0 时自动选择鼻点最低电压母线
+cpf_monitor_bus: 0
+cpf_verbose: true

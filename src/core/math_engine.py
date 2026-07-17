@@ -114,17 +114,11 @@ def calc_mismatch(V, theta, Y, bus_type, P_spec, Q_spec):
     计算功率不平衡量
     """
     n = len(V)
-    P_calc = np.zeros(n)
-    Q_calc = np.zeros(n)
-
-    # 遍历计算注入功率
-    for i in range(n):
-        for j in range(n):
-            G = Y[i][j].real
-            B = Y[i][j].imag
-            delta = theta[i] - theta[j]
-            P_calc[i] += V[i] * V[j] * (G * np.cos(delta) + B * np.sin(delta))
-            Q_calc[i] += V[i] * V[j] * (G * np.sin(delta) - B * np.cos(delta))
+    # 使用复数矩阵运算一次计算全部母线注入功率。
+    voltage = V * np.exp(1j * theta)
+    power = voltage * np.conj(Y @ voltage)
+    P_calc = power.real
+    Q_calc = power.imag
 
     dP = P_spec - P_calc
     dQ = Q_spec - Q_calc
@@ -153,52 +147,32 @@ def build_jacobian(V, theta, Y, bus_type, P_calc, Q_calc):
     J = np.zeros((m, m))
 
     # 构建基础导数矩阵 H, N, K, L
-    H = np.zeros((n, n))
-    N = np.zeros((n, n))
-    K = np.zeros((n, n))
-    L = np.zeros((n, n))
+    # 广播构造全部非对角导数，避免 Python 层的双重循环。
+    G = Y.real
+    B = Y.imag
+    delta = theta[:, None] - theta[None, :]
+    voltage_product = V[:, None] * V[None, :]
+    H = -voltage_product * (G * np.sin(delta) - B * np.cos(delta))
+    N = -voltage_product * (G * np.cos(delta) + B * np.sin(delta))
+    K = -N
+    L = H.copy()
 
-    for i in range(n):
-        for j in range(n):
-            if i != j:
-                G = Y[i][j].real
-                B = Y[i][j].imag
-                delta = theta[i] - theta[j]
-                
-                # 非对角元
-                H[i][j] = -V[i] * V[j] * (G * np.sin(delta) - B * np.cos(delta))
-                N[i][j] = -V[i] * V[j] * (G * np.cos(delta) + B * np.sin(delta))
-                K[i][j] = -N[i][j]      # =  V[i]*V[j]*(G*cos + B*sin)
-                L[i][j] = H[i][j]       # = -V[i]*V[j]*(G*sin - B*cos)
-                
-        # 对角元 (利用已计算的 P_calc 和 Q_calc 简化表达式)
-        Gii = Y[i][i].real
-        Bii = Y[i][i].imag
-        H[i][i] =  Q_calc[i] + Bii * V[i] * V[i]
-        N[i][i] = -P_calc[i] - Gii * V[i] * V[i]
-        K[i][i] = -P_calc[i] + Gii * V[i] * V[i]
-        L[i][i] = -Q_calc[i] + Bii * V[i] * V[i]
+    # 使用注入功率公式覆盖四个子矩阵的对角元素。
+    diagonal = np.arange(n)
+    voltage_square = V * V
+    Gii = np.diag(G)
+    Bii = np.diag(B)
+    H[diagonal, diagonal] = Q_calc + Bii * voltage_square
+    N[diagonal, diagonal] = -P_calc - Gii * voltage_square
+    K[diagonal, diagonal] = -P_calc + Gii * voltage_square
+    L[diagonal, diagonal] = -Q_calc + Bii * voltage_square
 
-    # 将 H, N, K, L 拼接到大雅可比矩阵 J 中
-    # 1. J11 (H): dP / dTheta
-    for i, row_node in enumerate(theta_idx):
-        for j, col_node in enumerate(theta_idx):
-            J[i, j] = H[row_node, col_node]
-            
-    # 2. J12 (N): dP / dV (除以V的修正版，视具体推导而定，这里使用常规 V * dP/dV 形式)
-    for i, row_node in enumerate(theta_idx):
-        for j, col_node in enumerate(v_idx):
-            J[i, len(theta_idx) + j] = N[row_node, col_node] / V[col_node]
-            
-    # 3. J21 (K): dQ / dTheta
-    for i, row_node in enumerate(v_idx):
-        for j, col_node in enumerate(theta_idx):
-            J[len(theta_idx) + i, j] = K[row_node, col_node]
-            
-    # 4. J22 (L): dQ / dV
-    for i, row_node in enumerate(v_idx):
-        for j, col_node in enumerate(v_idx):
-            J[len(theta_idx) + i, len(theta_idx) + j] = L[row_node, col_node] / V[col_node]
+    # 将 H、N、K、L 按降维索引一次拼接到雅可比矩阵中。
+    theta_count = len(theta_idx)
+    J[:theta_count, :theta_count] = H[np.ix_(theta_idx, theta_idx)]
+    J[:theta_count, theta_count:] = N[np.ix_(theta_idx, v_idx)]
+    J[theta_count:, :theta_count] = K[np.ix_(v_idx, theta_idx)]
+    J[theta_count:, theta_count:] = L[np.ix_(v_idx, v_idx)]
 
     return J, theta_idx, v_idx
 
