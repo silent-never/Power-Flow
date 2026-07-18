@@ -47,7 +47,8 @@ Power_Flow_Pro/
 │   │   └── step_control.py         # 自适应步长控制：根据收敛情况调整延拓步长
 │
 │   ├── analysis/               # 潮流分析工作流
-│   │   └── loadability.py          # CPF 前的统一 P/Q 负荷倍率扫描
+│   │   ├── loadability.py          # CPF 前的统一 P/Q 负荷倍率扫描
+│   │   └── solver_comparison.py     # NR 与快速解耦法的收敛及计时对比
 │
 │   ├── io/                     # 输入输出层
 │   │   ├── __init__.py
@@ -71,6 +72,8 @@ Power_Flow_Pro/
 │   │                                   # 稳定裕度曲线
 │
 │   ├── saves/                  # 保留的绘图与存档辅助内容
+│   │   ├── main_cpf_use.py         # CPF 主入口备份
+│   │   └── main_nr_analysis.py     # NR 分析主入口备份
 │   ├── temporary/              # 保留的临时研究与过渡内容
 │
 │   └── utils/                  # 通用工具模块
@@ -82,11 +85,10 @@ Power_Flow_Pro/
 │       └── config.py              # 参数配置管理
 │                                       # 管理求解精度、迭代次数等
 │
-├── main.py                        # 程序入口
-│                                   # - 数据加载
-│                                   # - 模型初始化
-│                                   # - 求解器调用
-│                                   # - 结果输出
+├── main.py                        # NR 与快速解耦潮流对比入口
+│                                   # - 相同初值下的收敛过程比较
+│                                   # - 多次求解的中位耗时比较
+│                                   # - 最终电压与相角一致性检查
 │
 └── config.yaml                    # 全局配置文件
                                     # - 收敛精度
@@ -94,6 +96,6 @@ Power_Flow_Pro/
                                     # - 求解算法选择
                                     # - CPF参数设置
 
-当前状态：Newton-Raphson 基础潮流、IEEE 数据解析、基础报表、PF 绘图和统一负荷倍率扫描可用。
-FastDecoupledSolver、ContinuationSolver、TensorSolver 及 CPF 专用绘图仍为待实现接口。
+当前状态：Newton-Raphson 基础潮流、快速解耦法 (XB scheme)、IEEE 数据解析、基础报表、PF 绘图、统一负荷倍率扫描和 CPF 连续潮流全套预测—校正均已可用。
+TensorSolver 仍为待实现接口。
 

@@ -572,6 +572,345 @@ class PFPlotter:
 
         self._save_figure(fig, save_name)
 
+    def plot_solver_comparison(
+        self,
+        comparison,
+        save_name="Solver_NR_FDLF_Comparison.png",
+    ):
+        """绘制误差、观测收敛阶和重复计时分布。"""
+        benchmarks = [comparison.nr, comparison.fast_decoupled]
+        colors = ["#1f77b4", "#ff7f0e"]
+        fig, axes = plt.subplots(
+            1,
+            3,
+            figsize=(18, 5),
+            constrained_layout=True,
+        )
+
+        convergence_axis, order_axis, timing_axis = axes
+        for benchmark, color in zip(benchmarks, colors):
+            errors = np.asarray(benchmark.error_history, dtype=float)
+            valid = np.isfinite(errors) & (errors > 0.0)
+            iterations = np.arange(1, len(errors) + 1)
+            if np.any(valid):
+                convergence_axis.semilogy(
+                    iterations[valid],
+                    errors[valid],
+                    marker="o",
+                    markersize=4,
+                    linewidth=2,
+                    color=color,
+                    label=(
+                        f"{benchmark.name} "
+                        f"({benchmark.iterations} 次)"
+                    ),
+                )
+
+            # 使用连续三个误差点估算局部观测收敛阶：
+            # p_k = ln(e_{k+1}/e_k) / ln(e_k/e_{k-1})。
+            order_iterations = []
+            observed_orders = []
+            for index in range(1, len(errors) - 1):
+                previous_error = errors[index - 1]
+                current_error = errors[index]
+                next_error = errors[index + 1]
+                if not (
+                    np.isfinite(previous_error)
+                    and np.isfinite(current_error)
+                    and np.isfinite(next_error)
+                    and previous_error > current_error > next_error > 1e-14
+                ):
+                    continue
+                denominator = np.log(current_error / previous_error)
+                if abs(denominator) <= 1e-12:
+                    continue
+                observed_order = (
+                    np.log(next_error / current_error) / denominator
+                )
+                if np.isfinite(observed_order):
+                    order_iterations.append(index + 2)
+                    observed_orders.append(observed_order)
+
+            if observed_orders:
+                order_axis.plot(
+                    order_iterations,
+                    observed_orders,
+                    marker="o",
+                    markersize=5,
+                    linewidth=2,
+                    color=color,
+                    label=benchmark.name,
+                )
+
+        convergence_axis.set_title("算法收敛过程", fontsize=14)
+        convergence_axis.set_xlabel("迭代次数", fontsize=11)
+        convergence_axis.set_ylabel("最大功率不平衡量", fontsize=11)
+        convergence_axis.grid(
+            True,
+            which="both",
+            linestyle="--",
+            alpha=0.5,
+        )
+        convergence_axis.legend(loc="best", fontsize=9)
+
+        order_axis.axhline(
+            1.0,
+            color="#2ca02c",
+            linestyle="--",
+            linewidth=1.5,
+            label="线性收敛 p=1",
+        )
+        order_axis.axhline(
+            2.0,
+            color="#d62728",
+            linestyle="--",
+            linewidth=1.5,
+            label="平方收敛 p=2",
+        )
+        order_axis.set_title("逐步观测收敛阶", fontsize=14)
+        order_axis.set_xlabel("迭代次数", fontsize=11)
+        order_axis.set_ylabel("观测阶 p", fontsize=11)
+        order_axis.set_ylim(0.0, 2.6)
+        order_axis.grid(True, linestyle="--", alpha=0.5)
+        order_axis.legend(loc="best", fontsize=8)
+
+        timing_samples = [
+            1000.0 * np.asarray(item.elapsed_samples, dtype=float)
+            for item in benchmarks
+        ]
+        boxplot = timing_axis.boxplot(
+            timing_samples,
+            tick_labels=[item.name for item in benchmarks],
+            patch_artist=True,
+            showmeans=True,
+        )
+        for patch, color in zip(boxplot["boxes"], colors):
+            patch.set_facecolor(color)
+            patch.set_alpha(0.65)
+
+        for position, (benchmark, samples, color) in enumerate(
+            zip(benchmarks, timing_samples, colors),
+            start=1,
+        ):
+            timing_axis.scatter(
+                np.full(len(samples), position),
+                samples,
+                color=color,
+                edgecolor="white",
+                linewidth=0.7,
+                zorder=4,
+            )
+            excluded_ms = (
+                1000.0
+                * np.asarray(
+                    benchmark.excluded_elapsed_samples,
+                    dtype=float,
+                )
+            )
+            if len(excluded_ms) > 0:
+                timing_axis.scatter(
+                    np.full(len(excluded_ms), position),
+                    excluded_ms,
+                    marker="x",
+                    s=110,
+                    color="#d62728",
+                    linewidth=2.5,
+                    zorder=7,
+                    label=(
+                        "IQR 识别的右侧异常值"
+                        if position == 1
+                        else None
+                    ),
+                )
+                excluded_text = ", ".join(
+                    f"{value:.3f}"
+                    for value in excluded_ms
+                )
+                timing_axis.annotate(
+                    f"排除 {excluded_text} ms",
+                    xy=(position, float(np.max(excluded_ms))),
+                    xytext=(8, -14),
+                    textcoords="offset points",
+                    ha="left",
+                    va="top",
+                    fontsize=8,
+                    color="#d62728",
+                    bbox={
+                        "boxstyle": "round,pad=0.2",
+                        "facecolor": "white",
+                        "edgecolor": "#d62728",
+                        "alpha": 0.85,
+                    },
+                )
+            timing_axis.text(
+                position,
+                1.02,
+                (
+                    f"中位数 {benchmark.median_time * 1000.0:.3f} ms\n"
+                    f"均值 {benchmark.mean_time * 1000.0:.3f} ms"
+                ),
+                transform=timing_axis.get_xaxis_transform(),
+                ha="center",
+                va="bottom",
+                fontsize=9,
+                bbox={
+                    "boxstyle": "round,pad=0.25",
+                    "facecolor": "white",
+                    "edgecolor": color,
+                    "alpha": 0.9,
+                },
+                zorder=6,
+            )
+
+        timing_axis.set_title(
+            "重复运行耗时分布（右侧异常值按 IQR 排除）",
+            fontsize=14,
+            pad=40,
+        )
+        timing_axis.set_yscale("log")
+        timing_axis.set_ylabel("求解耗时 (ms，对数坐标)", fontsize=11)
+        timing_axis.grid(
+            axis="y",
+            which="both",
+            linestyle="--",
+            alpha=0.5,
+        )
+        return self._save_figure(fig, save_name)
+
+    def plot_solver_batch_summary(
+        self,
+        case_results,
+        save_name="Solver_All_Cases_Summary.png",
+    ):
+        """汇总绘制全部测试系统的迭代、观测阶和中位耗时。"""
+        if not case_results:
+            return None
+
+        labels = [item[0] for item in case_results]
+        positions = np.arange(len(case_results))
+        nr_iterations = np.array(
+            [item[2].nr.iterations for item in case_results],
+            dtype=float,
+        )
+        fd_iterations = np.array(
+            [item[2].fast_decoupled.iterations for item in case_results],
+            dtype=float,
+        )
+        nr_orders = np.array(
+            [item[2].nr.observed_order for item in case_results],
+            dtype=float,
+        )
+        fd_orders = np.array(
+            [
+                item[2].fast_decoupled.observed_order
+                for item in case_results
+            ],
+            dtype=float,
+        )
+        nr_times = 1000.0 * np.array(
+            [item[2].nr.median_time for item in case_results],
+            dtype=float,
+        )
+        fd_times = 1000.0 * np.array(
+            [
+                item[2].fast_decoupled.median_time
+                for item in case_results
+            ],
+            dtype=float,
+        )
+
+        fig, axes = plt.subplots(
+            1,
+            3,
+            figsize=(19, 5.5),
+            constrained_layout=True,
+        )
+        iteration_axis, order_axis, timing_axis = axes
+        width = 0.38
+
+        iteration_axis.bar(
+            positions - width / 2,
+            nr_iterations,
+            width=width,
+            color="#1f77b4",
+            label="Newton-Raphson",
+        )
+        iteration_axis.bar(
+            positions + width / 2,
+            fd_iterations,
+            width=width,
+            color="#ff7f0e",
+            label="Fast-Decoupled (XB)",
+        )
+        iteration_axis.set_title("全部算例迭代次数", fontsize=14)
+        iteration_axis.set_ylabel("迭代次数", fontsize=11)
+        iteration_axis.grid(axis="y", linestyle="--", alpha=0.5)
+        iteration_axis.legend(fontsize=9)
+
+        order_axis.plot(
+            positions,
+            nr_orders,
+            marker="o",
+            linewidth=2,
+            color="#1f77b4",
+            label="Newton-Raphson",
+        )
+        order_axis.plot(
+            positions,
+            fd_orders,
+            marker="o",
+            linewidth=2,
+            color="#ff7f0e",
+            label="Fast-Decoupled (XB)",
+        )
+        order_axis.axhline(
+            1.0,
+            color="#2ca02c",
+            linestyle="--",
+            linewidth=1.3,
+            label="p=1",
+        )
+        order_axis.axhline(
+            2.0,
+            color="#d62728",
+            linestyle="--",
+            linewidth=1.3,
+            label="p=2",
+        )
+        order_axis.set_title("全部算例观测收敛阶", fontsize=14)
+        order_axis.set_ylabel("观测阶 p", fontsize=11)
+        order_axis.set_ylim(0.0, 2.7)
+        order_axis.grid(True, linestyle="--", alpha=0.5)
+        order_axis.legend(fontsize=8, loc="best")
+
+        timing_axis.semilogy(
+            positions,
+            nr_times,
+            marker="o",
+            linewidth=2,
+            color="#1f77b4",
+            label="Newton-Raphson",
+        )
+        timing_axis.semilogy(
+            positions,
+            fd_times,
+            marker="o",
+            linewidth=2,
+            color="#ff7f0e",
+            label="Fast-Decoupled (XB)",
+        )
+        timing_axis.set_title("全部算例中位求解耗时", fontsize=14)
+        timing_axis.set_ylabel("求解耗时 (ms，对数坐标)", fontsize=11)
+        timing_axis.grid(True, which="both", linestyle="--", alpha=0.5)
+        timing_axis.legend(fontsize=9)
+
+        for axis in axes:
+            axis.set_xticks(positions)
+            axis.set_xticklabels(labels, rotation=45, ha="right")
+            axis.set_xlabel("IEEE 测试系统节点数", fontsize=11)
+
+        return self._save_figure(fig, save_name)
+
     def plot_loadability_curve(
         self,
         result,

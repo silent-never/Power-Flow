@@ -4,6 +4,14 @@ base_mva: 100.0
 algorithm: nr
 tolerance: 1e-6
 max_iterations: 20
+# NR 与快速解耦法的公平对比设置
+# 每种算法总运行次数；第 1 次预热，其余样本按单侧 IQR 规则识别异常值
+comparison_repeat_count: 11
+comparison_all_cases: true
+# 批量计算时只为该节点系统保留单独三联图
+comparison_detail_case: 118
+comparison_flat_start: true
+comparison_fast_decoupled_max_iterations: 100
 plot_dir: output/plots
 
 # CPF 前的统一负荷倍率扫描

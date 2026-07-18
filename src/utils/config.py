@@ -15,6 +15,11 @@ class SolverConfig:
     algorithm: str = "nr"
     tolerance: float = 1e-6
     max_iterations: int = 20
+    comparison_repeat_count: int = 5
+    comparison_all_cases: bool = True
+    comparison_detail_case: int = 118
+    comparison_flat_start: bool = True
+    comparison_fast_decoupled_max_iterations: int = 100
     plot_dir: str = "output/plots"
     run_loadability_scan: bool = True
     load_multiplier_start: float = 1.0
@@ -102,6 +107,18 @@ def load_from_dict(values: dict[str, Any]) -> SolverConfig:
         raise ValueError("tolerance must be positive")
     if config.max_iterations <= 0:
         raise ValueError("max_iterations must be positive")
+    if config.comparison_repeat_count <= 1:
+        raise ValueError("comparison_repeat_count must exceed 1")
+    if not isinstance(config.comparison_all_cases, bool):
+        raise ValueError("comparison_all_cases must be boolean")
+    if config.comparison_detail_case <= 0:
+        raise ValueError("comparison_detail_case must be positive")
+    if not isinstance(config.comparison_flat_start, bool):
+        raise ValueError("comparison_flat_start must be boolean")
+    if config.comparison_fast_decoupled_max_iterations <= 0:
+        raise ValueError(
+            "comparison_fast_decoupled_max_iterations must be positive"
+        )
     if config.load_multiplier_start <= 0:
         raise ValueError("load_multiplier_start must be positive")
     if config.load_multiplier_stop <= config.load_multiplier_start:
