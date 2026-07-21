@@ -1,0 +1,72 @@
+\documentclass[UTF8,a4paper,12pt]{ctexart}
+\input{styles/report-style.sty}
+
+\renewcommand{\ReportAuthor}{Power-Flow 项目}
+\renewcommand{\ReportTitle}{潮流计算与病态收敛分析}
+\renewcommand{\ReportDate}{\today}
+
+\begin{document}
+
+\hypersetup{pageanchor=false}
+\begin{titlepage}
+  \thispagestyle{empty}
+  \centering
+  \vspace*{2.4cm}
+
+  {\heiti\zihao{1} 潮流计算与病态收敛分析\par}
+  \vspace{0.75cm}
+  {\heiti\zihao{2} 第四次汇报\par}
+
+  \vspace{1.2cm}
+  \rule{0.72\textwidth}{0.8pt}
+  \vspace{1.7cm}
+
+  \renewcommand{\arraystretch}{1.65}
+  \begin{tabular}{rl}
+    \heiti 项目名称： & Power-Flow 潮流计算程序\\
+    \heiti 研究对象： & IEEE 3--300 节点测试系统\\
+    \heiti 核心任务： & 潮流求解、算法比较与静态电压稳定分析\\
+    \heiti 报告日期： & \today
+  \end{tabular}
+
+  \vfill
+  \rule{0.72\textwidth}{0.4pt}
+  \vspace{0.45cm}
+
+  {\songti\zihao{-4} 基于项目概况、程序实现及实验结果编制\par}
+  \vspace{1.2cm}
+\end{titlepage}
+\hypersetup{pageanchor=true}
+\setcounter{page}{1}
+
+\noindent 本次汇报围绕\textbf{潮流计算在正常与病态工况下的收敛问题}展开，
+主要完成对潮流计算发散系统性分析。
+潮流方程建模、Newton--Raphson（NR）与快速解耦法（FDLF）对比、
+最优乘子法（OPF）与非线性规划法（NLP）的收敛性分析
+以及连续潮流法（CPF）的稳定极限分析。
+报告重点回答两个问题：
+\begin{itemize}
+  \item 一是”计算结果发散”究竟源于物理无解、初值吸引域还是数值过程；
+  \item 二是不同算法在精度、效率和临界工况的特性。
+\end{itemize}
+
+\medskip
+\noindent\textbf{本次汇报的主要结论：}
+NR 在近解区域具有近二次收敛特征；
+FDLF 单轮成本低，呈现线性收敛特性，但对高 $R/X$ 和临界工况更敏感；
+最优乘子法与非线性规划法能够抑制发散，却可能停在非零残差点；
+不同参数化方法下CPF越过鼻点的特性存在明显差异。
+
+\input{sections/01_introduction}
+\input{sections/02_model}
+\input{sections/03_methods}
+\input{sections/04_experiments}
+\input{sections/05_results}
+\input{sections/06_conclusion}
+
+\clearpage
+\nocite{*}
+\bibliographystyle{plain}
+\bibliography{../references/references}
+
+\end{document}

@@ -15,6 +15,32 @@ from ..solvers.pq_solver import FastDecoupledSolver
 
 
 @dataclass(frozen=True, slots=True)
+class SolverTimingBreakdown:
+    """纳入统计的重复运行中，各计算阶段的平均耗时。"""
+
+    mismatch_time: float = 0.0
+    matrix_build_time: float = 0.0
+    factorization_time: float = 0.0
+    linear_solve_time: float = 0.0
+    state_update_time: float = 0.0
+    globalization_time: float = 0.0
+    other_time: float = 0.0
+
+    @property
+    def measured_total(self) -> float:
+        """返回所有阶段平均耗时之和。"""
+        return (
+            self.mismatch_time
+            + self.matrix_build_time
+            + self.factorization_time
+            + self.linear_solve_time
+            + self.state_update_time
+            + self.globalization_time
+            + self.other_time
+        )
+
+
+@dataclass(frozen=True, slots=True)
 class SolverBenchmark:
     """一个潮流算法的收敛与计时结果。"""
 
@@ -34,6 +60,7 @@ class SolverBenchmark:
     timing_q3: float
     timing_mad: float
     outlier_upper_bound: float
+    timing_breakdown: SolverTimingBreakdown
     final_grid: PowerGrid
     failure_reason: str = ""
 
@@ -129,7 +156,7 @@ def _final_mismatch(grid: PowerGrid) -> float:
 
 def _classify_timing_samples(
     samples: list[float],
-) -> tuple[list[float], list[float], float]:
+) -> tuple[list[float], list[float], float, list[int]]:
     """使用单侧 Tukey-IQR 规则识别会向上拖高均值的耗时异常值。
 
     运行时间受到进程调度、首次动态库调用和后台任务影响时，通常只会
@@ -137,19 +164,66 @@ def _classify_timing_samples(
     四分位统计不稳定，此时保留全部样本。
     """
     if len(samples) < 4:
-        return samples.copy(), [], float("inf")
+        return samples.copy(), [], float("inf"), list(range(len(samples)))
 
     values = np.asarray(samples, dtype=float)
     q1, q3 = np.percentile(values, [25.0, 75.0])
     iqr = float(q3 - q1)
     upper_bound = float(q3 + 1.5 * iqr)
-    retained = [value for value in samples if value <= upper_bound]
+    retained_indices = [
+        index
+        for index, value in enumerate(samples)
+        if value <= upper_bound
+    ]
+    retained = [samples[index] for index in retained_indices]
     excluded = [value for value in samples if value > upper_bound]
 
     # 极端情况下避免筛选规则将全部样本排除。
     if not retained:
-        return samples.copy(), [], upper_bound
-    return retained, excluded, upper_bound
+        return samples.copy(), [], upper_bound, list(range(len(samples)))
+    return retained, excluded, upper_bound, retained_indices
+
+
+def _mean_timing_breakdown(
+    breakdown_samples: list[dict[str, float]],
+    retained_indices: list[int],
+    mean_total_time: float,
+) -> SolverTimingBreakdown:
+    """计算与正常总耗时样本严格对应的各阶段平均耗时。"""
+    retained = [breakdown_samples[index] for index in retained_indices]
+
+    def phase_mean(name: str) -> float:
+        if not retained:
+            return 0.0
+        return float(np.mean([float(item.get(name, 0.0)) for item in retained]))
+
+    mismatch_time = phase_mean("mismatch_time")
+    matrix_build_time = phase_mean("matrix_build_time")
+    factorization_time = phase_mean("factorization_time")
+    linear_solve_time = phase_mean("linear_solve_time")
+    state_update_time = phase_mean("state_update_time")
+    globalization_time = (
+        phase_mean("line_search_time")
+        + phase_mean("objective_evaluation_time")
+    )
+    measured = (
+        mismatch_time
+        + matrix_build_time
+        + factorization_time
+        + linear_solve_time
+        + state_update_time
+        + globalization_time
+    )
+    other_time = max(0.0, mean_total_time - measured)
+    return SolverTimingBreakdown(
+        mismatch_time=mismatch_time,
+        matrix_build_time=matrix_build_time,
+        factorization_time=factorization_time,
+        linear_solve_time=linear_solve_time,
+        state_update_time=state_update_time,
+        globalization_time=globalization_time,
+        other_time=other_time,
+    )
 
 
 def _benchmark_solver(
@@ -159,8 +233,9 @@ def _benchmark_solver(
     repeat_count: int,
     flat_start: bool,
 ) -> SolverBenchmark:
-    """重复运行求解器，剔除最大耗时后统计中位数。"""
+    """预热并重复运行求解器，识别异常耗时并汇总分阶段计时。"""
     elapsed_samples: list[float] = []
+    breakdown_samples: list[dict[str, float]] = []
     warmup_time: float | None = None
     representative_grid = _prepare_grid(base_grid, flat_start)
     representative_info: dict = {
@@ -190,6 +265,9 @@ def _benchmark_solver(
                 warmup_time = elapsed
             else:
                 elapsed_samples.append(elapsed)
+                breakdown_samples.append(
+                    dict(info.get("timing_breakdown", {}))
+                )
         all_success = all_success and bool(success)
 
         if repeat_index == 0:
@@ -197,10 +275,17 @@ def _benchmark_solver(
             representative_info = info
 
         if not success and not failure_reason:
-            failure_reason = "达到最大迭代次数后仍未收敛"
+            failure_reason = str(
+                info.get("failure_reason", "达到最大迭代次数后仍未收敛")
+            )
 
     raw_elapsed_samples = elapsed_samples.copy()
-    elapsed_samples, excluded_samples, outlier_upper_bound = (
+    (
+        elapsed_samples,
+        excluded_samples,
+        outlier_upper_bound,
+        retained_indices,
+    ) = (
         _classify_timing_samples(raw_elapsed_samples)
     )
 
@@ -219,6 +304,11 @@ def _benchmark_solver(
         float(np.std(elapsed_samples, ddof=1))
         if len(elapsed_samples) >= 2
         else 0.0
+    )
+    timing_breakdown = _mean_timing_breakdown(
+        breakdown_samples,
+        retained_indices,
+        mean_time,
     )
     if elapsed_samples:
         timing_q1, timing_q3 = (
@@ -251,6 +341,7 @@ def _benchmark_solver(
         timing_q3=timing_q3,
         timing_mad=timing_mad,
         outlier_upper_bound=outlier_upper_bound,
+        timing_breakdown=timing_breakdown,
         final_grid=representative_grid,
         failure_reason=failure_reason,
     )
@@ -290,7 +381,6 @@ def compare_power_flow_solvers(
         repeat_count=repeat_count,
         flat_start=flat_start,
     )
-
     if nr.success and fast_decoupled.success:
         max_voltage_difference = float(
             np.max(np.abs(nr.final_grid.V - fast_decoupled.final_grid.V))

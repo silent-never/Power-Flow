@@ -1,0 +1,63 @@
+\section{结果与分析}
+\label{sec:results}
+
+\subsection{全算例收敛与效率}
+
+现有结果表明，NR 在多数算例中用较少迭代完成求解，观测收敛阶接近 2；FDLF 的迭代次数更多、观测阶接近 1，但其固定矩阵可以重复利用，总耗时通常更低。
+
+\begin{figure}[p]
+\centering
+\includegraphics[width=\textwidth]{Solver_All_Cases_Summary.png}
+\caption{IEEE 全部算例的迭代次数、收敛阶和中位求解耗时}
+\label{fig:all-cases}
+\end{figure}
+
+从图~\ref{fig:all-cases}可以得到两点认识：其一，迭代次数不能直接代表总耗时，FDLF 通过复用系数矩阵以更多迭代换取更低单轮成本；其二，规模增大后两种算法的耗时均明显上升，线性方程组求解逐渐成为主要瓶颈。
+
+\subsection{IEEE 118 节点详细比较}
+
+在 $10^{-6}$ 精度和平坦启动条件下，118 节点算例中 NR 与 FDLF 分别约用 4 轮和 8 轮。现有结果中的 NR 中位耗时为 71.400 ms，FDLF 中位耗时为 6.983 ms，后者约快 10.2 倍。该倍数仅代表当前代码、配置与运行环境。
+
+\begin{figure}[p]
+\centering
+\includegraphics[width=\textwidth]{Solver_118_NR_FDLF_Comparison.png}
+\caption{IEEE 118 节点系统 NR 与 FDLF 的收敛和耗时分解}
+\label{fig:118-comparison}
+\end{figure}
+
+图~\ref{fig:118-comparison}进一步说明，NR 的主要开销集中在线性求解与回代，FDLF 的主要开销集中在固定矩阵的预处理。NR 的残差在后期快速下降，体现局部二次收敛；FDLF 则保持近线性下降。二者最终状态的一致性应通过母线电压、相角和功率残差共同校核。
+
+\subsection{鲁棒性与临界状态}
+
+常规初值扰动下两种算法均保持较高成功率。负荷逼近临界区域或线路 $R/X$ 增大后，FDLF 的迭代次数与失败概率增长更明显。最优乘子和非线性规划虽然能抑制发散，但若最终残差高于阈值，只能判定为残差停滞，不能视为潮流收敛。
+
+\begin{figure}[p]
+\centering
+\includegraphics[width=\textwidth]{Solver_118_Robustness.png}
+\caption{IEEE 118 节点系统的初值、负荷与线路参数鲁棒性}
+\label{fig:robustness}
+\end{figure}
+
+\begin{figure}[p]
+\centering
+\includegraphics[width=\textwidth]{Solver_118_Critical_Stagnation.png}
+\caption{IEEE 118 节点系统在参考鼻点前后的残差与控制量}
+\label{fig:critical}
+\end{figure}
+
+这里需要特别区分\textbf{物理稳定极限}与\textbf{数值收敛边界}。CPF 参考鼻点来自连续解分支；NR 或 FDLF 的最后收敛倍率则依赖初值、容差、迭代上限和 PV--PQ 转换规则。两者定义不同，若固定点算法在参考鼻点后仍返回结果，应优先核查方程集合、最终残差和解支，而不能直接提高系统稳定极限。
+
+\subsection{规模增长特征}
+
+当前结果显示，系统规模增大后矩阵构造与分解成本迅速增长。后续采用稀疏矩阵装配、稀疏分解和符号分解复用具有明确价值。
+
+\begin{figure}[p]
+\centering
+\includegraphics[width=\textwidth]{Solver_Scaling_Trend.png}
+\caption{网络拓扑、矩阵非零元及求解耗时的规模增长趋势}
+\label{fig:scaling}
+\end{figure}
+
+以节点数不少于 30 的算例拟合，当前实现中 NR 总耗时和单轮耗时对状态维数的增长指数分别约为 2.85 和 2.67，FDLF 分别约为 2.52 和 2.03。该结果说明当前实现仍带有明显的稠密线性代数特征，稀疏化是比微调迭代公式更优先的工程改进方向。
+
+\clearpage

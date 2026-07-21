@@ -1,0 +1,12 @@
+run_id: YYYYMMDD_HHMMSS_case_purpose
+created_at: YYYY-MM-DDTHH:MM:SS+08:00
+case: IEEE-118
+purpose: replace_with_experiment_purpose
+git_commit: replace_with_commit_hash
+working_tree_dirty: false
+python_version: replace_with_version
+platform: replace_with_platform
+config_file: config.yaml
+random_seed: 2026
+operator: replace_with_name
+

@@ -31,6 +31,12 @@ Power_Flow_Pro/
 │   │   │                               # 用于基础潮流求解与结果校验
 │   │   ├── pq_solver.py            # FastDecoupledSolver 快速解耦潮流算法
 │   │   │                               # 提高大规模系统计算效率
+│   │   ├── optimal_multiplier_solver.py
+│   │   │                               # OptimalMultiplierSolver 最优乘子潮流算法
+│   │   │                               # 沿牛顿方向最小化真实非线性失配范数
+│   │   ├── nonlinear_programming_solver.py
+│   │   │                               # NonlinearProgrammingSolver 非线性最小二乘潮流算法
+│   │   │                               # Armijo回溯与LM正则化增强全局收敛性
 │   │   ├── cpf_solver.py           # ContinuationSolver 连续潮流计算
 │   │   │                               # - 预测步(Predictor)
 │   │   │                               # - 校正步(Corrector)
@@ -48,7 +54,10 @@ Power_Flow_Pro/
 │
 │   ├── analysis/               # 潮流分析工作流
 │   │   ├── loadability.py          # CPF 前的统一 P/Q 负荷倍率扫描
-│   │   └── solver_comparison.py     # NR 与快速解耦法的收敛及计时对比
+│   │   ├── solver_comparison.py     # NR 与快速解耦法的收敛及计时对比
+│   │   ├── robustness.py            # 初值、负荷水平及 R/X 鲁棒性测试
+│   │   ├── critical_stagnation.py   # 鼻点前后乘子、步长与非零残差停滞分析
+│   │   └── scaling.py               # 系统规模与计算时间增长趋势分析
 │
 │   ├── io/                     # 输入输出层
 │   │   ├── __init__.py
@@ -85,7 +94,7 @@ Power_Flow_Pro/
 │       └── config.py              # 参数配置管理
 │                                       # 管理求解精度、迭代次数等
 │
-├── main.py                        # NR 与快速解耦潮流对比入口
+├── main.py                        # NR 与快速解耦潮流批量、计时及精度对比入口
 │                                   # - 相同初值下的收敛过程比较
 │                                   # - 多次求解的中位耗时比较
 │                                   # - 最终电压与相角一致性检查
@@ -96,6 +105,6 @@ Power_Flow_Pro/
                                     # - 求解算法选择
                                     # - CPF参数设置
 
-当前状态：Newton-Raphson 基础潮流、快速解耦法 (XB scheme)、IEEE 数据解析、基础报表、PF 绘图、统一负荷倍率扫描和 CPF 连续潮流全套预测—校正均已可用。
+当前状态：Newton-Raphson 基础潮流、快速解耦法 (XB scheme)、最优乘子法、非线性最小二乘规划法、IEEE 数据解析、基础报表、PF 绘图、统一负荷倍率扫描和 CPF 连续潮流全套预测—校正均已可用。
 TensorSolver 仍为待实现接口。
 

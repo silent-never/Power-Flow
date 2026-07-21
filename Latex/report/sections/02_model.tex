@@ -1,0 +1,28 @@
+\section{潮流问题建模}
+\label{sec:model}
+
+设节点导纳矩阵为 $\bm{Y}=\bm{G}+\mathrm{j}\bm{B}$，节点 $i$ 的电压为 $V_i\angle\theta_i$，则节点注入功率为
+\begin{align}
+P_i(\bm{x})&=V_i\sum_{j=1}^{n}V_j
+\left[G_{ij}\cos(\theta_i-\theta_j)+B_{ij}\sin(\theta_i-\theta_j)\right],\\
+Q_i(\bm{x})&=V_i\sum_{j=1}^{n}V_j
+\left[G_{ij}\sin(\theta_i-\theta_j)-B_{ij}\cos(\theta_i-\theta_j)\right].
+\end{align}
+
+根据平衡、PV 和 PQ 节点的已知量，潮流方程可统一表示为
+\begin{equation}
+\bm{f}(\bm{x})=
+\begin{bmatrix}
+\bm{P}^{\mathrm{spec}}-\bm{P}(\bm{x})\\
+\bm{Q}^{\mathrm{spec}}-\bm{Q}(\bm{x})
+\end{bmatrix}=\bm{0}.
+\label{eq:power-flow}
+\end{equation}
+
+对基准负荷引入统一增长参数 $\lambda$：
+\begin{equation}
+P_{L,i}(\lambda)=(1+\lambda)P_{L,i}^{0},\qquad
+Q_{L,i}(\lambda)=(1+\lambda)Q_{L,i}^{0}.
+\end{equation}
+由此得到 $\bm{f}(\bm{x},\lambda)=\bm{0}$。随着负荷增长，解沿高电压分支向鼻点移动；鼻点处雅可比矩阵趋于奇异，对应静态电压稳定极限。
+

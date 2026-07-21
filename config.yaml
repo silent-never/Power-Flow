@@ -4,7 +4,7 @@ base_mva: 100.0
 algorithm: nr
 tolerance: 1e-6
 max_iterations: 20
-# NR 与快速解耦法的公平对比设置
+# NR、快速解耦、最优乘子和非线性规划法的公平对比设置
 # 每种算法总运行次数；第 1 次预热，其余样本按单侧 IQR 规则识别异常值
 comparison_repeat_count: 11
 comparison_all_cases: true
@@ -12,6 +12,32 @@ comparison_all_cases: true
 comparison_detail_case: 118
 comparison_flat_start: true
 comparison_fast_decoupled_max_iterations: 100
+# 仅对详细算例执行不同收敛精度扫描；运行顺序为从宽松到严格
+comparison_run_tolerance_sweep: true
+comparison_tolerance_values: 1e-4, 1e-6, 1e-8, 1e-10
+# 每个精度运行 31 次：第 1 次预热，后 30 次进入统计
+comparison_tolerance_repeat_count: 31
+# 118 节点详细算例鲁棒性测试
+comparison_run_robustness: true
+robustness_random_trials: 20
+# 每一级电压扰动与相角扰动按相同位置配对
+robustness_voltage_perturbations: 0.02, 0.05, 0.10
+robustness_angle_perturbations_deg: 2, 5, 10
+# CPF 得到的 118 节点最大稳定负荷倍率约为 1.6074，仅在鼻点附近测试
+robustness_load_multipliers: 1.60, 1.605, 1.6074, 1.61, 1.615
+# NR 与快速解耦法分别二分细化收敛边界
+robustness_load_refinement_tolerance: 1e-5
+robustness_resistance_multipliers: 1.0, 2.0, 3.0
+robustness_random_seed: 2026
+# 全部 IEEE 算例的规模增长趋势；拟合时忽略小于 30 节点的固定开销区
+comparison_run_scaling_analysis: true
+comparison_scaling_min_nodes: 30
+# 最优乘子法与非线性规划法在 CPF 鼻点前后的停滞诊断
+comparison_run_critical_stagnation: true
+critical_stagnation_cpf_nose_multiplier: 1.6074
+critical_stagnation_load_multipliers: 1.600, 1.605, 1.6074, 1.610, 1.612, 1.613, 1.614, 1.615, 1.617, 1.620
+critical_stagnation_max_iterations: 60
+critical_stagnation_enforce_q_limits: true
 plot_dir: output/plots
 
 # CPF 前的统一负荷倍率扫描
@@ -25,7 +51,7 @@ load_scan_max_iterations: 50
 # 连续潮流计算
 run_cpf: true
 # 可选 natural、pseudo_arclength、tangent_angle、absolute_vp_angle
-cpf_parameterization: natural
+cpf_parameterization: tangent_angle
 cpf_lambda_init: 0.0
 cpf_lambda_min: -0.99
 cpf_lambda_max: 2.0

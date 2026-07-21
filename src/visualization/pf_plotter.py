@@ -2,6 +2,9 @@ import os
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib import font_manager
+from matplotlib.ticker import PercentFormatter
+
+from ..analysis.scaling import fit_power_law
 
 
 def _setup_matplotlib_environment():
@@ -579,15 +582,21 @@ class PFPlotter:
     ):
         """绘制误差、观测收敛阶和重复计时分布。"""
         benchmarks = [comparison.nr, comparison.fast_decoupled]
+        short_names = ["NR", "快速解耦"]
         colors = ["#1f77b4", "#ff7f0e"]
         fig, axes = plt.subplots(
-            1,
-            3,
-            figsize=(18, 5),
+            2,
+            2,
+            figsize=(15, 10),
             constrained_layout=True,
         )
 
-        convergence_axis, order_axis, timing_axis = axes
+        (
+            convergence_axis,
+            order_axis,
+            timing_axis,
+            breakdown_axis,
+        ) = axes.flat
         for benchmark, color in zip(benchmarks, colors):
             errors = np.asarray(benchmark.error_history, dtype=float)
             valid = np.isfinite(errors) & (errors > 0.0)
@@ -680,7 +689,7 @@ class PFPlotter:
         ]
         boxplot = timing_axis.boxplot(
             timing_samples,
-            tick_labels=[item.name for item in benchmarks],
+            tick_labels=short_names,
             patch_artist=True,
             showmeans=True,
         )
@@ -775,6 +784,691 @@ class PFPlotter:
             linestyle="--",
             alpha=0.5,
         )
+
+        phase_names = [
+            "功率不平衡量",
+            "矩阵构造",
+            "矩阵分解/预处理",
+            "线性求解/回代",
+            "状态更新",
+            "其余开销",
+        ]
+        phase_colors = [
+            "#4c78a8",
+            "#f58518",
+            "#e45756",
+            "#72b7b2",
+            "#54a24b",
+            "#b8b8b8",
+        ]
+        breakdown_axis.set_title("平均总耗时组成", fontsize=14, pad=12)
+        breakdown_axis.axis("off")
+        pie_axes = [
+            breakdown_axis.inset_axes([0.00, 0.13, 0.48, 0.78]),
+            breakdown_axis.inset_axes([0.52, 0.13, 0.48, 0.78]),
+        ]
+        legend_wedges = None
+        for pie_axis, benchmark, short_name in zip(
+            pie_axes,
+            benchmarks,
+            short_names,
+        ):
+            breakdown = benchmark.timing_breakdown
+            values = np.asarray(
+                [
+                    breakdown.mismatch_time,
+                    breakdown.matrix_build_time,
+                    breakdown.factorization_time,
+                    breakdown.linear_solve_time,
+                    breakdown.state_update_time,
+                    breakdown.other_time,
+                ],
+                dtype=float,
+            )
+
+            def show_percentage(percentage):
+                return f"{percentage:.1f}%" if percentage >= 2.0 else ""
+
+            wedges, _, _ = pie_axis.pie(
+                values,
+                colors=phase_colors,
+                startangle=90,
+                counterclock=False,
+                autopct=show_percentage,
+                pctdistance=0.68,
+                textprops={"fontsize": 8},
+                wedgeprops={"linewidth": 0.7, "edgecolor": "white"},
+            )
+            legend_wedges = wedges
+            pie_axis.set_title(
+                f"{short_name}\n均值 {benchmark.mean_time * 1000.0:.3f} ms",
+                fontsize=10,
+            )
+
+        breakdown_axis.legend(
+            legend_wedges,
+            phase_names,
+            fontsize=8,
+            loc="lower center",
+            bbox_to_anchor=(0.5, -0.03),
+            ncol=3,
+        )
+        return self._save_figure(fig, save_name)
+
+    def plot_solver_tolerance_comparison(
+        self,
+        tolerance_results,
+        save_name="Solver_Tolerance_Comparison.png",
+    ):
+        """绘制 NR 与快速解耦法在不同收敛精度下的性能变化。"""
+        if not tolerance_results:
+            return None
+
+        tolerances = np.asarray(
+            [item[0] for item in tolerance_results],
+            dtype=float,
+        )
+        comparisons = [item[1] for item in tolerance_results]
+        positions = np.arange(len(comparisons))
+        labels = [f"{value:.0e}" for value in tolerances]
+        nr_iterations = np.asarray(
+            [item.nr.iterations if item.nr.success else np.nan for item in comparisons],
+            dtype=float,
+        )
+        fd_iterations = np.asarray(
+            [
+                item.fast_decoupled.iterations
+                if item.fast_decoupled.success
+                else np.nan
+                for item in comparisons
+            ],
+            dtype=float,
+        )
+        nr_times = 1000.0 * np.asarray(
+            [item.nr.median_time for item in comparisons],
+            dtype=float,
+        )
+        fd_times = 1000.0 * np.asarray(
+            [item.fast_decoupled.median_time for item in comparisons],
+            dtype=float,
+        )
+        nr_errors = np.asarray(
+            [item.nr.final_error for item in comparisons],
+            dtype=float,
+        )
+        fd_errors = np.asarray(
+            [item.fast_decoupled.final_error for item in comparisons],
+            dtype=float,
+        )
+        speed_ratios = np.asarray(
+            [item.speed_ratio for item in comparisons], dtype=float
+        )
+
+        fig, axes = plt.subplots(
+            2,
+            2,
+            figsize=(14, 10),
+            constrained_layout=True,
+        )
+        iteration_axis, timing_axis, error_axis, ratio_axis = axes.flat
+        colors = ["#1f77b4", "#ff7f0e"]
+
+        iteration_axis.plot(
+            positions,
+            nr_iterations,
+            marker="o",
+            linewidth=2,
+            color=colors[0],
+            label="Newton-Raphson",
+        )
+        iteration_axis.plot(
+            positions,
+            fd_iterations,
+            marker="o",
+            linewidth=2,
+            color=colors[1],
+            label="Fast-Decoupled (XB)",
+        )
+        iteration_axis.set_title("不同精度下的迭代次数", fontsize=14)
+        iteration_axis.set_ylabel("迭代次数", fontsize=11)
+        iteration_axis.grid(True, linestyle="--", alpha=0.5)
+        iteration_axis.legend(fontsize=9)
+
+        timing_axis.semilogy(
+            positions,
+            nr_times,
+            marker="o",
+            linewidth=2,
+            color=colors[0],
+            label="Newton-Raphson",
+        )
+        timing_axis.semilogy(
+            positions,
+            fd_times,
+            marker="o",
+            linewidth=2,
+            color=colors[1],
+            label="Fast-Decoupled (XB)",
+        )
+        timing_axis.set_title("不同精度下的中位求解耗时", fontsize=14)
+        timing_axis.set_ylabel("中位耗时 (ms，对数坐标)", fontsize=11)
+        timing_axis.grid(True, which="both", linestyle="--", alpha=0.5)
+        timing_axis.legend(fontsize=9)
+
+        error_axis.semilogy(
+            positions,
+            nr_errors,
+            marker="o",
+            linewidth=2,
+            color=colors[0],
+            label="NR 最终残差",
+        )
+        error_axis.semilogy(
+            positions,
+            fd_errors,
+            marker="o",
+            linewidth=2,
+            color=colors[1],
+            label="FDLF 最终残差",
+        )
+        error_axis.semilogy(
+            positions,
+            tolerances,
+            marker="x",
+            linestyle="--",
+            linewidth=1.5,
+            color="#666666",
+            label="目标精度",
+        )
+        error_axis.set_title("目标精度与最终功率残差", fontsize=14)
+        error_axis.set_ylabel("最大功率不平衡量", fontsize=11)
+        error_axis.grid(True, which="both", linestyle="--", alpha=0.5)
+        error_axis.legend(fontsize=9)
+
+        ratio_axis.bar(
+            positions,
+            speed_ratios,
+            width=0.6,
+            color="#54a24b",
+            alpha=0.85,
+        )
+        ratio_axis.axhline(
+            1.0,
+            color="#d62728",
+            linestyle="--",
+            linewidth=1.5,
+            label="两种算法耗时相同",
+        )
+        ratio_axis.set_title("快速解耦法相对加速比", fontsize=14)
+        ratio_axis.set_ylabel("NR中位耗时 / FDLF中位耗时", fontsize=11)
+        ratio_axis.grid(axis="y", linestyle="--", alpha=0.5)
+        ratio_axis.legend(fontsize=9)
+
+        for axis in axes.flat:
+            axis.set_xticks(positions)
+            axis.set_xticklabels(labels)
+            axis.set_xlabel("收敛精度（向右逐渐严格）", fontsize=11)
+
+        return self._save_figure(fig, save_name)
+
+    def plot_solver_robustness(
+        self,
+        result,
+        save_name="Solver_Robustness.png",
+    ):
+        """绘制初值扰动、负荷倍率和线路 R/X 扰动的鲁棒性结果。"""
+        solver_names = ["Newton-Raphson", "Fast-Decoupled (XB)"]
+        solver_labels = ["NR", "快速解耦"]
+        colors = ["#1f77b4", "#ff7f0e"]
+        fig, axes = plt.subplots(
+            2,
+            2,
+            figsize=(15, 10),
+            constrained_layout=True,
+        )
+        initial_rate_axis, initial_iteration_axis, load_axis, resistance_axis = (
+            axes.flat
+        )
+
+        def category_data(category, solver_name):
+            return [
+                item
+                for item in result.summaries
+                if item.category == category and item.solver_name == solver_name
+            ]
+
+        def grouped_bars(axis, category, value_name, title, ylabel):
+            first = category_data(category, solver_names[0])
+            labels = [item.scenario for item in first]
+            positions = np.arange(len(labels), dtype=float)
+            width = 0.38
+            for solver_index, (solver_name, solver_label, color) in enumerate(
+                zip(solver_names, solver_labels, colors)
+            ):
+                summaries = category_data(category, solver_name)
+                values = np.asarray(
+                    [getattr(item, value_name) for item in summaries],
+                    dtype=float,
+                )
+                offsets = positions + (solver_index - 0.5) * width
+                bars = axis.bar(
+                    offsets,
+                    np.nan_to_num(values, nan=0.0),
+                    width=width,
+                    color=color,
+                    alpha=0.85,
+                    label=solver_label,
+                )
+                for bar, value, summary in zip(bars, values, summaries):
+                    if value_name == "success_rate":
+                        text = f"{value:.0%}"
+                    elif np.isfinite(value):
+                        text = f"{value:.1f}"
+                    else:
+                        text = "失败"
+                    axis.text(
+                        bar.get_x() + bar.get_width() / 2.0,
+                        bar.get_height(),
+                        text,
+                        ha="center",
+                        va="bottom",
+                        fontsize=8,
+                        color="#d62728" if not summary.success_count else "#333333",
+                    )
+            axis.set_title(title, fontsize=14)
+            axis.set_ylabel(ylabel, fontsize=11)
+            axis.set_xticks(positions)
+            axis.set_xticklabels(labels, rotation=20, ha="right")
+            axis.grid(axis="y", linestyle="--", alpha=0.5)
+            axis.legend(fontsize=9)
+
+        grouped_bars(
+            initial_rate_axis,
+            "initial",
+            "success_rate",
+            "不同初值下的收敛成功率",
+            "成功率",
+        )
+        initial_rate_axis.set_ylim(0.0, 1.12)
+        initial_rate_axis.yaxis.set_major_formatter(PercentFormatter(1.0))
+
+        grouped_bars(
+            initial_iteration_axis,
+            "initial",
+            "mean_iterations",
+            "不同初值下的平均迭代次数",
+            "成功试验平均迭代次数",
+        )
+        for solver_name, solver_label, color in zip(
+            solver_names,
+            solver_labels,
+            colors,
+        ):
+            summaries = category_data("load", solver_name)
+            parameters = np.asarray(
+                [item.parameter for item in summaries],
+                dtype=float,
+            )
+            success_rates = np.asarray(
+                [item.success_rate for item in summaries],
+                dtype=float,
+            )
+            load_axis.plot(
+                parameters,
+                success_rates,
+                marker="o",
+                markersize=5,
+                linewidth=2,
+                color=color,
+                label=solver_label,
+            )
+            bracket = result.load_convergence_bracket(solver_name)
+            if bracket is not None:
+                low, high = bracket
+                load_axis.axvspan(low, high, color=color, alpha=0.16)
+                load_axis.axvline(
+                    (low + high) / 2.0,
+                    color=color,
+                    linestyle="--",
+                    linewidth=1.3,
+                )
+                load_axis.annotate(
+                    f"{solver_label}: [{low:.6f}, {high:.6f}]",
+                    xy=((low + high) / 2.0, 0.48),
+                    xytext=(4, 0),
+                    textcoords="offset points",
+                    rotation=90,
+                    ha="left",
+                    va="center",
+                    fontsize=8,
+                    color=color,
+                )
+        load_axis.set_title("鼻点附近负荷倍率收敛边界", fontsize=14)
+        load_axis.set_xlabel("负荷倍率", fontsize=11)
+        load_axis.set_ylabel("收敛成功率", fontsize=11)
+        load_axis.set_ylim(0.0, 1.12)
+        load_axis.yaxis.set_major_formatter(PercentFormatter(1.0))
+        load_axis.grid(True, linestyle="--", alpha=0.5)
+        load_axis.legend(fontsize=9, loc="best")
+        grouped_bars(
+            resistance_axis,
+            "resistance",
+            "mean_iterations",
+            "线路电阻倍率（R/X）平均迭代次数",
+            "成功试验平均迭代次数",
+        )
+
+        return self._save_figure(fig, save_name)
+
+    def plot_critical_stagnation(
+        self,
+        result,
+        save_name="Solver_Critical_Stagnation.png",
+    ):
+        """绘制鼻点前后四种潮流算法的停滞特征。"""
+        solver_specs = (
+            ("Newton-Raphson", "NR", "#1f77b4", "o"),
+            ("Fast-Decoupled (XB)", "FDLF", "#ff7f0e", "^"),
+            ("Optimal Multiplier", "最优乘子", "#2ca02c", "s"),
+            ("Nonlinear Programming", "非线性规划", "#9467bd", "D"),
+        )
+        fig, axes = plt.subplots(
+            2,
+            2,
+            figsize=(15, 10),
+            constrained_layout=True,
+        )
+        residual_axis, iteration_axis, history_axis, control_axis = axes.flat
+
+        selected_points = []
+        for solver_name, label, color, marker in solver_specs:
+            points = list(result.points_for(solver_name))
+            multipliers = np.asarray(
+                [item.load_multiplier for item in points], dtype=float
+            )
+            residuals = np.asarray(
+                [max(item.final_error, 1e-16) for item in points], dtype=float
+            )
+            # 极端发散值只在图上截顶，避免压缩其他方法的非零停滞残差。
+            displayed_residuals = np.minimum(residuals, 1e3)
+            iterations = np.asarray([item.iterations for item in points])
+            terminal_controls = np.asarray(
+                [
+                    max(item.terminal_control, 1e-8)
+                    if np.isfinite(item.terminal_control)
+                    else np.nan
+                    for item in points
+                ],
+                dtype=float,
+            )
+            residual_axis.semilogy(
+                multipliers,
+                displayed_residuals,
+                marker=marker,
+                linewidth=2,
+                color=color,
+                label=label,
+            )
+            failed = np.asarray([not item.success for item in points])
+            if np.any(failed):
+                residual_axis.scatter(
+                    multipliers[failed],
+                    displayed_residuals[failed],
+                    marker="x",
+                    s=100,
+                    linewidth=2.2,
+                    color="#d62728",
+                    zorder=5,
+                )
+            iteration_axis.plot(
+                multipliers,
+                iterations,
+                marker=marker,
+                linewidth=2,
+                color=color,
+                label=label,
+            )
+            if solver_name in {"Optimal Multiplier", "Nonlinear Programming"}:
+                control_axis.semilogy(
+                    multipliers,
+                    terminal_controls,
+                    marker=marker,
+                    linewidth=2,
+                    color=color,
+                    label=(
+                        "终止乘子 μ"
+                        if solver_name == "Optimal Multiplier"
+                        else "终止步长 α"
+                    ),
+                )
+
+            successful = [item for item in points if item.success]
+            failures = [item for item in points if not item.success]
+            if successful:
+                selected_points.append((max(successful, key=lambda item: item.load_multiplier), color, "--"))
+            if failures:
+                selected_points.append((min(failures, key=lambda item: item.load_multiplier), color, "-"))
+
+        short_names = {
+            "Newton-Raphson": "NR",
+            "Fast-Decoupled (XB)": "FDLF",
+            "Optimal Multiplier": "OM",
+            "Nonlinear Programming": "NLP",
+        }
+        for point, color, linestyle in selected_points:
+            errors = np.asarray(point.error_history, dtype=float)
+            valid = np.isfinite(errors) & (errors > 0.0)
+            history_axis.semilogy(
+                np.arange(1, len(errors) + 1)[valid],
+                errors[valid],
+                color=color,
+                linestyle=linestyle,
+                linewidth=2,
+                label=(
+                    f"{short_names[point.solver_name]} "
+                    f"{point.load_multiplier:.4f}× {point.status}"
+                ),
+            )
+
+        for axis in (residual_axis, iteration_axis, control_axis):
+            axis.axvline(
+                result.cpf_nose_multiplier,
+                color="#d62728",
+                linestyle="--",
+                linewidth=1.6,
+                label="CPF鼻点" if axis is residual_axis else None,
+            )
+            axis.set_xlabel("统一负荷倍率", fontsize=11)
+            axis.grid(True, which="both", linestyle="--", alpha=0.5)
+
+        residual_axis.axhline(
+            1e-6,
+            color="#666666",
+            linestyle=":",
+            linewidth=1.4,
+            label="收敛阈值 1e-6",
+        )
+        residual_axis.set_title("鼻点前后的最终潮流残差", fontsize=14)
+        residual_axis.set_ylabel("最终最大功率失配", fontsize=11)
+        residual_axis.set_ylim(1e-14, 2e3)
+        residual_axis.text(
+            0.99,
+            0.02,
+            "超过 1e3 的发散残差按 1e3 截顶显示",
+            transform=residual_axis.transAxes,
+            ha="right",
+            va="bottom",
+            fontsize=8,
+            color="#666666",
+        )
+        residual_axis.legend(fontsize=8)
+
+        iteration_axis.set_title("总迭代次数（包含PV转PQ后的重求解）", fontsize=14)
+        iteration_axis.set_ylabel("总迭代次数", fontsize=11)
+        iteration_axis.legend(fontsize=9)
+
+        history_axis.set_title("最后收敛点与首次失败点的残差轨迹", fontsize=14)
+        history_axis.set_xlabel("累计迭代序号", fontsize=11)
+        history_axis.set_ylabel("最大功率失配", fontsize=11)
+        history_axis.grid(True, which="both", linestyle="--", alpha=0.5)
+        history_axis.legend(fontsize=8)
+
+        control_axis.axhline(
+            1.0,
+            color="#666666",
+            linestyle=":",
+            linewidth=1.3,
+            label="完整步长",
+        )
+        control_axis.set_title("失败时乘子或回溯步长趋零", fontsize=14)
+        control_axis.set_ylabel("终止控制量（对数坐标）", fontsize=11)
+        control_axis.legend(fontsize=8)
+
+        return self._save_figure(fig, save_name)
+
+    def plot_solver_scaling_trend(
+        self,
+        scaling_results,
+        minimum_nodes=30,
+        save_name="Solver_Scaling_Trend.png",
+    ):
+        """绘制系统规模、矩阵稀疏度和求解耗时的增长趋势。"""
+        if len(scaling_results) < 2:
+            return None
+        ordered = sorted(scaling_results, key=lambda item: item[1].node_count)
+        metrics = [item[1] for item in ordered]
+        comparisons = [item[2] for item in ordered]
+        nodes = np.asarray([item.node_count for item in metrics], dtype=float)
+        branches = np.asarray([item.branch_count for item in metrics], dtype=float)
+        pq_counts = np.asarray([item.pq_count for item in metrics], dtype=float)
+        state_dimensions = np.asarray(
+            [item.state_dimension for item in metrics],
+            dtype=float,
+        )
+        jacobian_nnz = np.asarray(
+            [item.jacobian_nnz for item in metrics],
+            dtype=float,
+        )
+        b_prime_nnz = np.asarray(
+            [item.b_prime_nnz for item in metrics],
+            dtype=float,
+        )
+        b_double_prime_nnz = np.asarray(
+            [item.b_double_prime_nnz for item in metrics],
+            dtype=float,
+        )
+        solver_specs = (
+            ("NR", lambda item: item.nr, "#1f77b4"),
+            ("FDLF", lambda item: item.fast_decoupled, "#ff7f0e"),
+        )
+        total_time_series = []
+        iteration_time_series = []
+        for name, getter, color in solver_specs:
+            times = 1000.0 * np.asarray(
+                [getter(item).median_time for item in comparisons],
+                dtype=float,
+            )
+            per_iteration = times / np.maximum(
+                [getter(item).iterations for item in comparisons],
+                1,
+            )
+            total_time_series.append((name, times, color))
+            iteration_time_series.append((name, per_iteration, color))
+
+        fig, axes = plt.subplots(
+            2,
+            2,
+            figsize=(15, 10),
+            constrained_layout=True,
+        )
+        topology_axis, matrix_axis, total_axis, iteration_axis = axes.flat
+
+        topology_axis.loglog(
+            nodes, branches, marker="o", linewidth=2, label="支路数"
+        )
+        topology_axis.loglog(
+            nodes, state_dimensions, marker="s", linewidth=2, label="状态维数"
+        )
+        topology_axis.loglog(
+            nodes, pq_counts, marker="^", linewidth=2, label="PQ节点数"
+        )
+        topology_axis.set_title("拓扑与状态变量规模", fontsize=14)
+        topology_axis.set_xlabel("节点数", fontsize=11)
+        topology_axis.set_ylabel("数量（对数坐标）", fontsize=11)
+        topology_axis.grid(True, which="both", linestyle="--", alpha=0.5)
+        topology_axis.legend(fontsize=9)
+
+        matrix_axis.loglog(
+            state_dimensions,
+            jacobian_nnz,
+            marker="o",
+            linewidth=2,
+            label="雅可比矩阵非零元",
+        )
+        matrix_axis.loglog(
+            state_dimensions,
+            b_prime_nnz,
+            marker="s",
+            linewidth=2,
+            label="B' 非零元",
+        )
+        matrix_axis.loglog(
+            state_dimensions,
+            b_double_prime_nnz,
+            marker="^",
+            linewidth=2,
+            label="B'' 非零元",
+        )
+        matrix_axis.set_title("线性方程组非零元增长", fontsize=14)
+        matrix_axis.set_xlabel("潮流状态维数", fontsize=11)
+        matrix_axis.set_ylabel("非零元数量（对数坐标）", fontsize=11)
+        matrix_axis.grid(True, which="both", linestyle="--", alpha=0.5)
+        matrix_axis.legend(fontsize=9)
+
+        fit_mask = nodes >= minimum_nodes
+        fit_sizes = state_dimensions[fit_mask]
+
+        def plot_time_fit(axis, series, title, ylabel):
+            fit_x = np.geomspace(np.min(fit_sizes), np.max(fit_sizes), 100)
+            for name, values, color in series:
+                axis.loglog(
+                    state_dimensions,
+                    values,
+                    marker="o",
+                    linewidth=1.8,
+                    color=color,
+                    label=f"{name} 实测",
+                )
+                fitted = fit_power_law(fit_sizes, values[fit_mask])
+                axis.loglog(
+                    fit_x,
+                    fitted.predict(fit_x),
+                    linestyle="--",
+                    color=color,
+                    label=(
+                        f"{name}拟合 p={fitted.exponent:.2f}, "
+                        f"R2={fitted.r_squared:.2f}"
+                    ),
+                )
+            axis.set_title(title, fontsize=14)
+            axis.set_xlabel("潮流状态维数", fontsize=11)
+            axis.set_ylabel(ylabel, fontsize=11)
+            axis.grid(True, which="both", linestyle="--", alpha=0.5)
+            axis.legend(fontsize=8)
+
+        plot_time_fit(
+            total_axis,
+            total_time_series,
+            f"总耗时增长（拟合节点数 ≥ {minimum_nodes}）",
+            "中位总耗时 (ms，对数坐标)",
+        )
+        plot_time_fit(
+            iteration_axis,
+            iteration_time_series,
+            f"等效单次迭代耗时（拟合节点数 ≥ {minimum_nodes}）",
+            "中位总耗时/迭代次数 (ms，对数坐标)",
+        )
+
         return self._save_figure(fig, save_name)
 
     def plot_solver_batch_summary(
@@ -788,35 +1482,9 @@ class PFPlotter:
 
         labels = [item[0] for item in case_results]
         positions = np.arange(len(case_results))
-        nr_iterations = np.array(
-            [item[2].nr.iterations for item in case_results],
-            dtype=float,
-        )
-        fd_iterations = np.array(
-            [item[2].fast_decoupled.iterations for item in case_results],
-            dtype=float,
-        )
-        nr_orders = np.array(
-            [item[2].nr.observed_order for item in case_results],
-            dtype=float,
-        )
-        fd_orders = np.array(
-            [
-                item[2].fast_decoupled.observed_order
-                for item in case_results
-            ],
-            dtype=float,
-        )
-        nr_times = 1000.0 * np.array(
-            [item[2].nr.median_time for item in case_results],
-            dtype=float,
-        )
-        fd_times = 1000.0 * np.array(
-            [
-                item[2].fast_decoupled.median_time
-                for item in case_results
-            ],
-            dtype=float,
+        solver_specs = (
+            ("NR", lambda item: item.nr, "#1f77b4"),
+            ("FDLF", lambda item: item.fast_decoupled, "#ff7f0e"),
         )
 
         fig, axes = plt.subplots(
@@ -827,42 +1495,37 @@ class PFPlotter:
         )
         iteration_axis, order_axis, timing_axis = axes
         width = 0.38
-
-        iteration_axis.bar(
-            positions - width / 2,
-            nr_iterations,
-            width=width,
-            color="#1f77b4",
-            label="Newton-Raphson",
-        )
-        iteration_axis.bar(
-            positions + width / 2,
-            fd_iterations,
-            width=width,
-            color="#ff7f0e",
-            label="Fast-Decoupled (XB)",
-        )
+        for solver_index, (name, getter, color) in enumerate(solver_specs):
+            benchmarks = [getter(item[2]) for item in case_results]
+            offset = positions + (solver_index - 0.5) * width
+            iteration_axis.bar(
+                offset,
+                [item.iterations for item in benchmarks],
+                width=width,
+                color=color,
+                label=name,
+            )
+            order_axis.plot(
+                positions,
+                [item.observed_order for item in benchmarks],
+                marker="o",
+                linewidth=1.8,
+                color=color,
+                label=name,
+            )
+            timing_axis.semilogy(
+                positions,
+                [1000.0 * item.median_time for item in benchmarks],
+                marker="o",
+                linewidth=1.8,
+                color=color,
+                label=name,
+            )
         iteration_axis.set_title("全部算例迭代次数", fontsize=14)
         iteration_axis.set_ylabel("迭代次数", fontsize=11)
         iteration_axis.grid(axis="y", linestyle="--", alpha=0.5)
         iteration_axis.legend(fontsize=9)
 
-        order_axis.plot(
-            positions,
-            nr_orders,
-            marker="o",
-            linewidth=2,
-            color="#1f77b4",
-            label="Newton-Raphson",
-        )
-        order_axis.plot(
-            positions,
-            fd_orders,
-            marker="o",
-            linewidth=2,
-            color="#ff7f0e",
-            label="Fast-Decoupled (XB)",
-        )
         order_axis.axhline(
             1.0,
             color="#2ca02c",
@@ -883,22 +1546,6 @@ class PFPlotter:
         order_axis.grid(True, linestyle="--", alpha=0.5)
         order_axis.legend(fontsize=8, loc="best")
 
-        timing_axis.semilogy(
-            positions,
-            nr_times,
-            marker="o",
-            linewidth=2,
-            color="#1f77b4",
-            label="Newton-Raphson",
-        )
-        timing_axis.semilogy(
-            positions,
-            fd_times,
-            marker="o",
-            linewidth=2,
-            color="#ff7f0e",
-            label="Fast-Decoupled (XB)",
-        )
         timing_axis.set_title("全部算例中位求解耗时", fontsize=14)
         timing_axis.set_ylabel("求解耗时 (ms，对数坐标)", fontsize=11)
         timing_axis.grid(True, which="both", linestyle="--", alpha=0.5)

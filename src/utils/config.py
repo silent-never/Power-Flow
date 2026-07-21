@@ -20,6 +20,26 @@ class SolverConfig:
     comparison_detail_case: int = 118
     comparison_flat_start: bool = True
     comparison_fast_decoupled_max_iterations: int = 100
+    comparison_run_tolerance_sweep: bool = True
+    comparison_tolerance_values: str = "1e-4,1e-6,1e-8,1e-10"
+    comparison_tolerance_repeat_count: int = 31
+    comparison_run_robustness: bool = True
+    robustness_random_trials: int = 20
+    robustness_voltage_perturbations: str = "0.02,0.05,0.10"
+    robustness_angle_perturbations_deg: str = "2,5,10"
+    robustness_load_multipliers: str = "1.58,1.60,1.605,1.6074,1.61,1.615,1.63"
+    robustness_load_refinement_tolerance: float = 1e-5
+    robustness_resistance_multipliers: str = "1.0,2.0,3.0"
+    robustness_random_seed: int = 2026
+    comparison_run_scaling_analysis: bool = True
+    comparison_scaling_min_nodes: int = 30
+    comparison_run_critical_stagnation: bool = True
+    critical_stagnation_cpf_nose_multiplier: float = 1.6074
+    critical_stagnation_load_multipliers: str = (
+        "1.600,1.605,1.6074,1.610,1.612,1.613,1.614,1.615,1.617,1.620"
+    )
+    critical_stagnation_max_iterations: int = 60
+    critical_stagnation_enforce_q_limits: bool = True
     plot_dir: str = "output/plots"
     run_loadability_scan: bool = True
     load_multiplier_start: float = 1.0
@@ -119,6 +139,78 @@ def load_from_dict(values: dict[str, Any]) -> SolverConfig:
         raise ValueError(
             "comparison_fast_decoupled_max_iterations must be positive"
         )
+    if not isinstance(config.comparison_run_tolerance_sweep, bool):
+        raise ValueError("comparison_run_tolerance_sweep must be boolean")
+    try:
+        tolerance_values = [
+            float(value.strip())
+            for value in config.comparison_tolerance_values.replace("，", ",").split(",")
+            if value.strip()
+        ]
+    except (AttributeError, ValueError) as exc:
+        raise ValueError(
+            "comparison_tolerance_values must be comma-separated numbers"
+        ) from exc
+    if not tolerance_values or any(value <= 0.0 for value in tolerance_values):
+        raise ValueError("comparison tolerance values must be positive")
+    if config.comparison_tolerance_repeat_count <= 1:
+        raise ValueError("comparison_tolerance_repeat_count must exceed 1")
+    if not isinstance(config.comparison_run_robustness, bool):
+        raise ValueError("comparison_run_robustness must be boolean")
+    if config.robustness_random_trials <= 0:
+        raise ValueError("robustness_random_trials must be positive")
+    robustness_value_names = (
+        "robustness_voltage_perturbations",
+        "robustness_angle_perturbations_deg",
+        "robustness_load_multipliers",
+        "robustness_resistance_multipliers",
+    )
+    parsed_robustness_values: dict[str, list[float]] = {}
+    for name in robustness_value_names:
+        raw_value = getattr(config, name)
+        try:
+            parsed = [
+                float(value.strip())
+                for value in raw_value.replace("，", ",").split(",")
+                if value.strip()
+            ]
+        except (AttributeError, ValueError) as exc:
+            raise ValueError(f"{name} must be comma-separated numbers") from exc
+        if not parsed or any(value <= 0.0 for value in parsed):
+            raise ValueError(f"{name} values must be positive")
+        parsed_robustness_values[name] = parsed
+    if len(parsed_robustness_values["robustness_voltage_perturbations"]) != len(
+        parsed_robustness_values["robustness_angle_perturbations_deg"]
+    ):
+        raise ValueError("robustness voltage and angle levels must have equal length")
+    if config.robustness_load_refinement_tolerance <= 0.0:
+        raise ValueError("robustness_load_refinement_tolerance must be positive")
+    if not isinstance(config.comparison_run_scaling_analysis, bool):
+        raise ValueError("comparison_run_scaling_analysis must be boolean")
+    if config.comparison_scaling_min_nodes <= 0:
+        raise ValueError("comparison_scaling_min_nodes must be positive")
+    if not isinstance(config.comparison_run_critical_stagnation, bool):
+        raise ValueError("comparison_run_critical_stagnation must be boolean")
+    if config.critical_stagnation_cpf_nose_multiplier <= 0.0:
+        raise ValueError("critical_stagnation_cpf_nose_multiplier must be positive")
+    try:
+        stagnation_values = [
+            float(value.strip())
+            for value in config.critical_stagnation_load_multipliers.replace(
+                "，", ","
+            ).split(",")
+            if value.strip()
+        ]
+    except (AttributeError, ValueError) as exc:
+        raise ValueError(
+            "critical_stagnation_load_multipliers must be comma-separated numbers"
+        ) from exc
+    if not stagnation_values or any(value <= 0.0 for value in stagnation_values):
+        raise ValueError("critical stagnation load multipliers must be positive")
+    if config.critical_stagnation_max_iterations <= 0:
+        raise ValueError("critical_stagnation_max_iterations must be positive")
+    if not isinstance(config.critical_stagnation_enforce_q_limits, bool):
+        raise ValueError("critical_stagnation_enforce_q_limits must be boolean")
     if config.load_multiplier_start <= 0:
         raise ValueError("load_multiplier_start must be positive")
     if config.load_multiplier_stop <= config.load_multiplier_start:

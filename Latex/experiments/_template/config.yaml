@@ -1,0 +1,9 @@
+# 将实际运行使用的 config.yaml 完整复制到这里。
+# 不要只记录与默认值不同的字段。
+
+data_file: data/118ieee.txt
+algorithm: nr
+tolerance: 1.0e-6
+max_iterations: 20
+random_seed: 2026
+

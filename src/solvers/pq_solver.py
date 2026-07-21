@@ -142,14 +142,25 @@ class FastDecoupledSolver(BaseSolver):
             "iterations": 0,
             "max_error_history": [],
             "time_elapsed": 0.0,
+            "timing_breakdown": {
+                "mismatch_time": 0.0,
+                "matrix_build_time": 0.0,
+                "factorization_time": 0.0,
+                "linear_solve_time": 0.0,
+                "state_update_time": 0.0,
+            },
         }
+        timing = info["timing_breakdown"]
 
         # ---- build constant matrices (once) -------------------------
+        phase_start = time.perf_counter()
         B_prime, non_slack = self._build_b_prime(grid)
         B_double_prime, pq_buses = self._build_b_double_prime(grid)
+        timing["matrix_build_time"] += time.perf_counter() - phase_start
 
         n_theta = len(non_slack)
         n_v = len(pq_buses)
+        phase_start = time.perf_counter()
         B_prime_factor = (
             self._factor_constant_matrix(B_prime)
             if n_theta > 0
@@ -160,6 +171,7 @@ class FastDecoupledSolver(BaseSolver):
             if n_v > 0
             else None
         )
+        timing["factorization_time"] += time.perf_counter() - phase_start
 
         if self.verbose:
             print("开始快速解耦法 (XB scheme) 迭代...")
@@ -167,7 +179,9 @@ class FastDecoupledSolver(BaseSolver):
         # ---- iteration loop -----------------------------------------
         for iteration in range(self.max_iter):
             # ---------- P–θ half-step ----------
+            phase_start = time.perf_counter()
             dP, dQ = grid.get_mismatch()
+            timing["mismatch_time"] += time.perf_counter() - phase_start
 
             max_dP = float(np.max(np.abs(dP[non_slack]))) if n_theta else 0.0
             max_dQ = float(np.max(np.abs(dQ[pq_buses]))) if n_v else 0.0
@@ -194,9 +208,13 @@ class FastDecoupledSolver(BaseSolver):
             # Δθ = B'⁻¹ · (ΔP / V)    —  only for non-slack buses
             if n_theta > 0:
                 rhs_p = dP[non_slack] / grid.V[non_slack]
+                phase_start = time.perf_counter()
                 d_theta_slice = self._solve_factored(
                     B_prime_factor,
                     rhs_p,
+                )
+                timing["linear_solve_time"] += (
+                    time.perf_counter() - phase_start
                 )
 
                 # Optional stabiliser: half the correction when the
@@ -207,20 +225,34 @@ class FastDecoupledSolver(BaseSolver):
 
                 d_theta = np.zeros(grid.n)
                 d_theta[non_slack] = d_theta_slice
+                phase_start = time.perf_counter()
                 grid.theta += d_theta
+                timing["state_update_time"] += (
+                    time.perf_counter() - phase_start
+                )
 
             # ---------- Q–V half-step ----------
             if n_v > 0:
                 # recompute mismatches with updated angles
+                phase_start = time.perf_counter()
                 dP, dQ = grid.get_mismatch()
+                timing["mismatch_time"] += time.perf_counter() - phase_start
 
                 # ΔV = B''⁻¹ · (ΔQ / V)    —  only for PQ buses
                 rhs_q = dQ[pq_buses] / grid.V[pq_buses]
+                phase_start = time.perf_counter()
                 d_v = self._solve_factored(
                     B_double_prime_factor,
                     rhs_q,
                 )
+                timing["linear_solve_time"] += (
+                    time.perf_counter() - phase_start
+                )
+                phase_start = time.perf_counter()
                 grid.V[pq_buses] += d_v
+                timing["state_update_time"] += (
+                    time.perf_counter() - phase_start
+                )
 
         # ---- did not converge ---------------------------------------
         info["iterations"] = self.max_iter

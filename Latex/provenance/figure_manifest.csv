@@ -1,0 +1,7 @@
+report_file,source_run,source_file,git_commit,config_snapshot,selection_reason
+Solver_All_Cases_Summary.png,legacy-output-import,output/plots/Solver_All_Cases_Summary.png,unknown,unknown,当前报告使用的全算例汇总图
+Solver_118_NR_FDLF_Comparison.png,legacy-output-import,output/plots/Solver_118_NR_FDLF_Comparison.png,unknown,unknown,当前报告使用的118节点详细比较图
+Solver_118_Robustness.png,legacy-output-import,output/plots/Solver_118_Robustness.png,unknown,unknown,当前报告使用的鲁棒性分析图
+Solver_118_Critical_Stagnation.png,legacy-output-import,output/plots/Solver_118_Critical_Stagnation.png,unknown,unknown,当前报告使用的临界停滞分析图
+Solver_Scaling_Trend.png,legacy-output-import,output/plots/Solver_Scaling_Trend.png,unknown,unknown,当前报告使用的规模增长趋势图
+

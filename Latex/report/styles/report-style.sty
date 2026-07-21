@@ -1,0 +1,64 @@
+\RequirePackage[left=2.6cm,right=2.6cm,top=2.7cm,bottom=2.7cm]{geometry}
+\RequirePackage{amsmath,amssymb,bm}
+\RequirePackage{booktabs,tabularx,multirow}
+\RequirePackage{graphicx,float}
+\RequirePackage{enumitem}
+\RequirePackage{caption}
+\RequirePackage{xcolor}
+\RequirePackage{hyperref}
+\RequirePackage{fancyhdr}
+\RequirePackage{setspace}
+
+% 正文只引用已经筛选确认的图片，不直接引用程序临时输出目录。
+\graphicspath{{../assets/figures/selected/}}
+\captionsetup{font=small,labelfont=bf,labelsep=quad,skip=6pt}
+\hypersetup{
+  colorlinks=true,
+  linkcolor=black,
+  citecolor=blue,
+  urlcolor=blue
+}
+
+\setlist{nosep,leftmargin=2em}
+\setlength{\parindent}{2em}
+\setlength{\parskip}{0.15em}
+\setlength{\headheight}{15pt}
+\setlength{\emergencystretch}{2em}
+\renewcommand{\arraystretch}{1.25}
+\setstretch{1.22}
+\setlength{\textfloatsep}{12pt plus 2pt minus 2pt}
+\setlength{\floatsep}{10pt plus 2pt minus 2pt}
+
+% 参照教师优秀进展报告：中文序号、紧凑层级、正文直接进入主题。
+\ctexset{
+  section={
+    name={,、},
+    number=\chinese{section},
+    format=\heiti\zihao{-3},
+    beforeskip=1.4ex plus .2ex,
+    afterskip=.8ex
+  },
+  subsection={
+    format=\heiti\zihao{4},
+    beforeskip=1.2ex plus .2ex,
+    afterskip=.5ex
+  },
+  subsubsection={
+    format=\heiti\zihao{-4},
+    beforeskip=1ex,
+    afterskip=.4ex
+  }
+}
+
+\newcommand{\ReportAuthor}{Power-Flow}
+\newcommand{\ReportTitle}{潮流计算与病态收敛分析}
+\newcommand{\ReportDate}{\today}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\songti\zihao{5}\ReportAuthor}
+\fancyhead[C]{\heiti\zihao{-4}\ReportTitle}
+\fancyhead[R]{\songti\zihao{5}\ReportDate}
+\fancyfoot[C]{\thepage}
+\renewcommand{\headrulewidth}{0.5pt}
+\renewcommand{\footrulewidth}{0pt}
