@@ -9,6 +9,7 @@ import numpy as np
 from ..core.grid import PowerGrid
 from .parameter import (
     ABSOLUTE_VP_ANGLE_PARAMETERIZATION,
+    LOCAL_VOLTAGE_PARAMETERIZATION,
     NATURAL_PARAMETERIZATION,
     PSEUDO_ARCLENGTH_PARAMETERIZATION,
     TANGENT_ANGLE_PARAMETERIZATION,
@@ -122,6 +123,18 @@ def _tangent_angle_constraint(
     return float(tangent_p * delta_p + tangent_v * delta_v)
 
 
+def _local_voltage_constraint(
+    grid: PowerGrid,
+    predictor: PredictorResult,
+    parameter_state: CPFParameterState,
+) -> float:
+    """计算选定母线电压与预测目标电压之间的约束误差。"""
+    bus_index = parameter_state.local_voltage_bus_index
+    if bus_index is None:
+        raise ValueError("局部电压参数化母线尚未确定")
+    return float(grid.V[bus_index] - predictor.grid.V[bus_index])
+
+
 def _absolute_vp_angle_constraint(
     grid: PowerGrid,
     lambda_value: float,
@@ -218,6 +231,39 @@ def _solve_tangent_angle_correction(
     augmented_matrix[-1, voltage_position] = tangent_v * grid.V[bus_index]
     augmented_matrix[-1, -1] = tangent_p
 
+    right_hand_side = -np.concatenate(
+        [mismatch, np.array([constraint], dtype=float)]
+    )
+    correction = np.linalg.solve(augmented_matrix, right_hand_side)
+    return correction[:-1], float(correction[-1])
+
+
+def _solve_local_voltage_correction(
+    grid: PowerGrid,
+    jacobian: np.ndarray,
+    mismatch: np.ndarray,
+    constraint: float,
+    parameter_state: CPFParameterState,
+    theta_indices: list[int],
+    voltage_indices: list[int],
+) -> tuple[np.ndarray, float]:
+    """求解固定局部母线电压的增广 Newton 校正方程。"""
+    bus_index = parameter_state.local_voltage_bus_index
+    if bus_index is None or bus_index not in voltage_indices:
+        raise ValueError("局部电压参数化母线不是 PQ 母线")
+    lambda_derivative = build_lambda_derivative(
+        grid,
+        theta_indices,
+        voltage_indices,
+    )
+    variable_count = jacobian.shape[0]
+    augmented_matrix = np.zeros(
+        (variable_count + 1, variable_count + 1), dtype=float
+    )
+    augmented_matrix[:variable_count, :variable_count] = jacobian
+    augmented_matrix[:variable_count, -1] = lambda_derivative
+    voltage_position = len(theta_indices) + voltage_indices.index(bus_index)
+    augmented_matrix[-1, voltage_position] = grid.V[bus_index]
     right_hand_side = -np.concatenate(
         [mismatch, np.array([constraint], dtype=float)]
     )
@@ -326,6 +372,12 @@ def apply_corrector(
 
                 if parameterization == NATURAL_PARAMETERIZATION:
                     constraint = 0.0
+                elif parameterization == LOCAL_VOLTAGE_PARAMETERIZATION:
+                    constraint = _local_voltage_constraint(
+                        grid,
+                        predictor,
+                        parameter_state,
+                    )
                 elif parameterization == PSEUDO_ARCLENGTH_PARAMETERIZATION:
                     constraint = _parameter_constraint(
                         grid,
@@ -378,6 +430,18 @@ def apply_corrector(
                 if parameterization == NATURAL_PARAMETERIZATION:
                     state_correction, lambda_correction = (
                         _solve_natural_correction(jacobian, mismatch)
+                    )
+                elif parameterization == LOCAL_VOLTAGE_PARAMETERIZATION:
+                    state_correction, lambda_correction = (
+                        _solve_local_voltage_correction(
+                            grid,
+                            jacobian,
+                            mismatch,
+                            constraint,
+                            parameter_state,
+                            theta_indices,
+                            voltage_indices,
+                        )
                     )
                 elif parameterization == PSEUDO_ARCLENGTH_PARAMETERIZATION:
                     state_correction, lambda_correction = (

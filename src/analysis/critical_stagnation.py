@@ -63,6 +63,53 @@ class CriticalStagnationResult:
         )
 
 
+@dataclass(frozen=True, slots=True)
+class StagnationBoundary:
+    """A refined convergence-to-stagnation bracket for one solver."""
+
+    solver_name: str
+    last_converged: CriticalStagnationPoint
+    first_failed: CriticalStagnationPoint
+
+    @property
+    def bracket(self) -> tuple[float, float]:
+        return (
+            self.last_converged.load_multiplier,
+            self.first_failed.load_multiplier,
+        )
+
+    @property
+    def width(self) -> float:
+        low, high = self.bracket
+        return high - low
+
+
+@dataclass(frozen=True, slots=True)
+class AdvancedStagnationBoundaryResult:
+    """Refined OM/NLP stagnation boundaries near the IEEE-118 nose point."""
+
+    cpf_nose_multiplier: float
+    tolerance: float
+    refinement_tolerance: float
+    enforce_q_limits: bool
+    points: tuple[CriticalStagnationPoint, ...]
+    boundaries: tuple[StagnationBoundary, ...]
+
+    def points_for(self, solver_name: str) -> tuple[CriticalStagnationPoint, ...]:
+        return tuple(
+            sorted(
+                (item for item in self.points if item.solver_name == solver_name),
+                key=lambda item: item.load_multiplier,
+            )
+        )
+
+    def boundary_for(self, solver_name: str) -> StagnationBoundary | None:
+        return next(
+            (item for item in self.boundaries if item.solver_name == solver_name),
+            None,
+        )
+
+
 def _scaled_grid(base_grid: PowerGrid, multiplier: float) -> PowerGrid:
     """构造与 CPF 负荷增长定义一致的平坦启动电网。"""
     grid = PowerGrid(
@@ -235,4 +282,103 @@ def run_critical_stagnation_analysis(
         cpf_nose_multiplier=float(cpf_nose_multiplier),
         enforce_q_limits=bool(enforce_q_limits),
         points=tuple(points),
+    )
+
+
+def run_advanced_stagnation_boundary_analysis(
+    base_grid: PowerGrid,
+    load_multipliers: tuple[float, ...],
+    cpf_nose_multiplier: float,
+    tolerance: float,
+    max_iterations: int = 60,
+    enforce_q_limits: bool = True,
+    refinement_tolerance: float = 1e-5,
+) -> AdvancedStagnationBoundaryResult:
+    """Locate OM/NLP convergence-failure brackets by coarse scan and bisection.
+
+    A point counts as converged only when the solver reports success *and* the
+    independently recomputed power-flow residual is below ``tolerance``.  This
+    prevents a vanishing multiplier or line-search step from being mistaken for
+    a physical power-flow solution.
+    """
+    if len(load_multipliers) < 2 or any(value <= 0.0 for value in load_multipliers):
+        raise ValueError("load_multipliers must contain at least two positive values")
+    if cpf_nose_multiplier <= 0.0 or tolerance <= 0.0:
+        raise ValueError("cpf_nose_multiplier and tolerance must be positive")
+    if max_iterations <= 0 or refinement_tolerance <= 0.0:
+        raise ValueError("iteration and refinement limits must be positive")
+
+    solver_names = ("Optimal Multiplier", "Nonlinear Programming")
+    points: list[CriticalStagnationPoint] = []
+
+    def solve(multiplier: float, solver_name: str) -> CriticalStagnationPoint:
+        point = _solve_point(
+            base_grid,
+            multiplier,
+            solver_name,
+            tolerance,
+            max_iterations,
+            enforce_q_limits,
+        )
+        points.append(point)
+        return point
+
+    def is_strictly_converged(point: CriticalStagnationPoint) -> bool:
+        return (
+            point.success
+            and np.isfinite(point.final_error)
+            and point.final_error < tolerance
+        )
+
+    coarse_values = sorted(set(float(value) for value in load_multipliers))
+    coarse: dict[str, list[CriticalStagnationPoint]] = {
+        solver_name: [] for solver_name in solver_names
+    }
+    for multiplier in coarse_values:
+        for solver_name in solver_names:
+            coarse[solver_name].append(solve(multiplier, solver_name))
+
+    boundaries: list[StagnationBoundary] = []
+    for solver_name in solver_names:
+        converged = [
+            item for item in coarse[solver_name] if is_strictly_converged(item)
+        ]
+        if not converged:
+            continue
+        low_point = max(converged, key=lambda item: item.load_multiplier)
+        failed = [
+            item
+            for item in coarse[solver_name]
+            if item.load_multiplier > low_point.load_multiplier
+            and not is_strictly_converged(item)
+        ]
+        if not failed:
+            continue
+        high_point = min(failed, key=lambda item: item.load_multiplier)
+
+        while high_point.load_multiplier - low_point.load_multiplier > refinement_tolerance:
+            middle = 0.5 * (
+                low_point.load_multiplier + high_point.load_multiplier
+            )
+            middle_point = solve(middle, solver_name)
+            if is_strictly_converged(middle_point):
+                low_point = middle_point
+            else:
+                high_point = middle_point
+
+        boundaries.append(
+            StagnationBoundary(
+                solver_name=solver_name,
+                last_converged=low_point,
+                first_failed=high_point,
+            )
+        )
+
+    return AdvancedStagnationBoundaryResult(
+        cpf_nose_multiplier=float(cpf_nose_multiplier),
+        tolerance=float(tolerance),
+        refinement_tolerance=float(refinement_tolerance),
+        enforce_q_limits=bool(enforce_q_limits),
+        points=tuple(points),
+        boundaries=tuple(boundaries),
     )

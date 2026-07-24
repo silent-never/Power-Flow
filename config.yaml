@@ -1,5 +1,5 @@
 # Power-Flow 全局配置（当前使用扁平 YAML 格式）
-data_file: data/118ieee.txt
+data_file: data/030ieee.txt
 base_mva: 100.0
 algorithm: nr
 tolerance: 1e-6
@@ -38,6 +38,7 @@ critical_stagnation_cpf_nose_multiplier: 1.6074
 critical_stagnation_load_multipliers: 1.600, 1.605, 1.6074, 1.610, 1.612, 1.613, 1.614, 1.615, 1.617, 1.620
 critical_stagnation_max_iterations: 60
 critical_stagnation_enforce_q_limits: true
+critical_stagnation_refinement_tolerance: 1e-5
 plot_dir: output/plots
 
 # CPF 前的统一负荷倍率扫描
@@ -50,7 +51,10 @@ load_scan_max_iterations: 50
 
 # 连续潮流计算
 run_cpf: true
-# 可选 natural、pseudo_arclength、tangent_angle、absolute_vp_angle
+# 临时筛选：遍历 data 目录内全部 IEEE 节点系统并分别输出整套 CPF 图片
+cpf_all_cases: false
+# 可选 natural、local_voltage、pseudo_arclength、tangent_angle、absolute_vp_angle
+# 当前使用局部电压参数化：沿指定 PQ 母线的低电压方向进行预测
 cpf_parameterization: tangent_angle
 cpf_lambda_init: 0.0
 cpf_lambda_min: -0.99
@@ -70,6 +74,9 @@ cpf_post_nose_steps: 20
 cpf_initial_direction: 1
 # 是否在发电机无功越限后将 PV 母线单向转换为 PQ
 cpf_enforce_q_limits: true
+# 局部电压参数化母线；0 表示按当前算例自动选择电压最敏感的 PQ 母线
+# 若要手动指定，请填写当前数据文件中实际存在的 PQ 母线号
+cpf_local_voltage_bus: 0
 # P–V 切线角监测母线；0 表示自动选择电压最敏感的 PQ 母线
 cpf_tangent_angle_bus: 0
 # 鼻点加密：|cosφ| 小于阈值后对两种角度参数化自动缩小步长
@@ -77,6 +84,12 @@ cpf_tangent_angle_refinement: true
 cpf_tangent_angle_refinement_cos_threshold: 0.35
 # 鼻点处局部步长不低于 cpf_max_step 的这一比例
 cpf_tangent_angle_refinement_min_step_ratio: 0.02
+# 相邻完整状态切线的方向余弦低于该值时，切换伪弧长防止跳支；
+# 设为 0 可关闭此项保护
+cpf_tangent_angle_full_state_cos_threshold: 0.20
+# 报告采用单鼻点曲线：越过首个鼻点后若 λ 再次换向，则在换向前终止；
+# 设为 false 可继续追踪完整的多折点支路
+cpf_tangent_angle_stop_at_second_lambda_turn: true
 # P–V 投影无法跨越相角型鼻点时，自动切换伪弧长继续跟踪
 cpf_tangent_angle_pseudo_fallback: true
 # 绝对 V/P 角参数化母线；供 cpf_parameterization: absolute_vp_angle 使用
@@ -84,5 +97,6 @@ cpf_tangent_angle_pseudo_fallback: true
 cpf_absolute_vp_angle_bus: 0
 cpf_absolute_vp_angle_pseudo_fallback: true
 # 设为 0 时自动选择鼻点最低电压母线
+# 0 表示绘图时自动使用鼻点处电压降最大的 PQ 母线
 cpf_monitor_bus: 0
 cpf_verbose: true

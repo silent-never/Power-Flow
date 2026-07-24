@@ -14,12 +14,14 @@ from dataclasses import dataclass
 
 
 NATURAL_PARAMETERIZATION = "natural"
+LOCAL_VOLTAGE_PARAMETERIZATION = "local_voltage"
 PSEUDO_ARCLENGTH_PARAMETERIZATION = "pseudo_arclength"
 TANGENT_ANGLE_PARAMETERIZATION = "tangent_angle"
 ABSOLUTE_VP_ANGLE_PARAMETERIZATION = "absolute_vp_angle"
 SUPPORTED_PARAMETERIZATIONS = frozenset(
     {
         NATURAL_PARAMETERIZATION,
+        LOCAL_VOLTAGE_PARAMETERIZATION,
         PSEUDO_ARCLENGTH_PARAMETERIZATION,
         TANGENT_ANGLE_PARAMETERIZATION,
         ABSOLUTE_VP_ANGLE_PARAMETERIZATION,
@@ -56,10 +58,13 @@ class CPFParameter:
     parameterization: str = NATURAL_PARAMETERIZATION
     initial_direction: int = 1
     enforce_q_limits: bool = True
+    local_voltage_bus: int = 0
     tangent_angle_bus: int = 0
     tangent_angle_refinement: bool = True
     tangent_angle_refinement_cos_threshold: float = 0.35
     tangent_angle_refinement_min_step_ratio: float = 0.02
+    tangent_angle_full_state_cos_threshold: float = 0.20
+    tangent_angle_stop_at_second_lambda_turn: bool = True
     tangent_angle_pseudo_fallback: bool = True
     absolute_vp_angle_bus: int = 0
     absolute_vp_angle_pseudo_fallback: bool = True
@@ -81,6 +86,9 @@ class CPFParameter:
             ),
             "tangent_angle_refinement_min_step_ratio": (
                 self.tangent_angle_refinement_min_step_ratio
+            ),
+            "tangent_angle_full_state_cos_threshold": (
+                self.tangent_angle_full_state_cos_threshold
             ),
         }
         for name, value in finite_values.items():
@@ -131,12 +139,21 @@ class CPFParameter:
             raise ValueError("enforce_q_limits 必须是布尔值")
         if self.tangent_angle_bus < 0:
             raise ValueError("tangent_angle_bus 不能小于 0")
+        if self.local_voltage_bus < 0:
+            raise ValueError("local_voltage_bus 不能小于 0")
         if self.absolute_vp_angle_bus < 0:
             raise ValueError("absolute_vp_angle_bus 不能小于 0")
         if not isinstance(self.tangent_angle_refinement, bool):
             raise ValueError("tangent_angle_refinement 必须是布尔值")
         if not isinstance(self.tangent_angle_pseudo_fallback, bool):
             raise ValueError("tangent_angle_pseudo_fallback 必须是布尔值")
+        if not isinstance(
+            self.tangent_angle_stop_at_second_lambda_turn,
+            bool,
+        ):
+            raise ValueError(
+                "tangent_angle_stop_at_second_lambda_turn 必须是布尔值"
+            )
         if not isinstance(self.absolute_vp_angle_pseudo_fallback, bool):
             raise ValueError("absolute_vp_angle_pseudo_fallback 必须是布尔值")
         if not 0.0 < self.tangent_angle_refinement_cos_threshold <= 1.0:
@@ -146,6 +163,10 @@ class CPFParameter:
         if not 0.0 < self.tangent_angle_refinement_min_step_ratio <= 1.0:
             raise ValueError(
                 "tangent_angle_refinement_min_step_ratio 必须位于 0 和 1 之间"
+            )
+        if not 0.0 <= self.tangent_angle_full_state_cos_threshold <= 1.0:
+            raise ValueError(
+                "tangent_angle_full_state_cos_threshold 必须位于 0 和 1 之间"
             )
 
     def load_multiplier(self, lambda_value: float | None = None) -> float:
@@ -198,6 +219,7 @@ class CPFParameterState:
     direction: int = 1
     step_index: int = 0
     retry_count: int = 0
+    local_voltage_bus_index: int | None = None
     tangent_angle_bus_index: int | None = None
     absolute_vp_angle_bus_index: int | None = None
     active_parameterization: str | None = None

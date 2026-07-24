@@ -1,63 +1,614 @@
 \section{结果与分析}
 \label{sec:results}
 
-\subsection{全算例收敛与效率}
+\subsection{NR法全算例收敛}
 
-现有结果表明，NR 在多数算例中用较少迭代完成求解，观测收敛阶接近 2；FDLF 的迭代次数更多、观测阶接近 1，但其固定矩阵可以重复利用，总耗时通常更低。
+本小节仅分析 Newton--Raphson（NR）法的计算结果。
+特别的，以 IEEE 118 节点系统为算例，
+收敛容差设为 $10^{-6}$，最大迭代次数为 20。
+分别从状态变量与功率平衡两个层面校核最终解：
+电压幅值和相角用于检验状态量与标准结果的一致性，
+有功及非 PQ 节点无功则用于检验潮流方程和节点功率计算是否闭合。
 
-\begin{figure}[p]
+首先在统一平坦启动和 $10^{-6}$ 收敛容差下，遍历现有 IEEE 3、4、5、9、14、
+30、39、43、57、118、145、162 和 300 节点共 13 个测试系统。图~\ref{fig:nr-all-cases-accuracy}
+的横坐标采用等间距的算例位置，节点数仅作为刻度标签，避免大节点算例之间的数值间隔
+压缩小节点算例的显示空间。纵坐标分别给出参与 NR 收敛判定的最大有功失配和最大
+PQ 节点无功失配。
+
+\begin{figure}[H]
 \centering
-\includegraphics[width=\textwidth]{Solver_All_Cases_Summary.png}
-\caption{IEEE 全部算例的迭代次数、收敛阶和中位求解耗时}
-\label{fig:all-cases}
+\includegraphics[width=0.95\textwidth]{IEEE_All_Cases_Deviation_vs_Node_Count.png}
+\caption{IEEE 3--300 节点系统 NR 方程残差与节点数校核}
+\label{fig:nr-all-cases-accuracy}
 \end{figure}
 
-从图~\ref{fig:all-cases}可以得到两点认识：其一，迭代次数不能直接代表总耗时，FDLF 通过复用系数矩阵以更多迭代换取更低单轮成本；其二，规模增大后两种算法的耗时均明显上升，线性方程组求解逐渐成为主要瓶颈。
+由图~\ref{fig:nr-all-cases-accuracy}可见，全部 13 个已有算例均成功收敛，且两类功率
+失配均位于 $10^{-6}$ 容差线以下。其中最接近容差的是 IEEE 5 节点系统，其最终最大
+方程失配为 $4.556\times10^{-7}$~p.u.，仍仅为容差的约 $45.6\%$；其余算例同样留有
+不同程度的精度裕量。这说明在当前数据、平坦启动和迭代上限设置下，NR 的收敛性没有
+随系统节点数增加而失效，现有 3--300 节点测试系统均能得到满足精度要求的潮流解。
 
-\subsection{IEEE 118 节点详细比较}
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.95\textwidth]{IEEE_01_Voltage_Comparison.png}
+\caption{IEEE 118 节点系统 NR 计算电压与标准结果的比较}
+\label{fig:nr-voltage}
+\end{figure}
 
-在 $10^{-6}$ 精度和平坦启动条件下，118 节点算例中 NR 与 FDLF 分别约用 4 轮和 8 轮。现有结果中的 NR 中位耗时为 71.400 ms，FDLF 中位耗时为 6.983 ms，后者约快 10.2 倍。该倍数仅代表当前代码、配置与运行环境。
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.95\textwidth]{IEEE_02_Angle_Comparison.png}
+\caption{IEEE 118 节点系统 NR 计算相角与标准结果的比较}
+\label{fig:nr-angle}
+\end{figure}
 
-\begin{figure}[p]
+图~\ref{fig:nr-voltage}中两组电压曲线基本重合，
+最大绝对偏差为$9.343\times10^{-4}$~p.u.，出现在 20 号母线；
+图~\ref{fig:nr-angle}中的最大相角偏差为 $9.203\times10^{-4}$~deg，
+出现在 70 号母线。
+两类状态量偏差均很小，
+且没有系统性偏离特征，
+说明 NR 解与数据文件给出的标准状态具有良好一致性。
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.95\textwidth]{IEEE_03_Active_Power_Comparison.png}
+\caption{IEEE 118 节点系统 NR 计算有功与指定值的比较}
+\label{fig:nr-active-power}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.95\textwidth]{IEEE_04_Reactive_NonPQ_Comparison.png}
+\caption{IEEE 118 节点系统 NR 计算无功与非 PQ 节点标准值的比较}
+\label{fig:nr-reactive-power}
+\end{figure}
+
+功率结果校核进一步检验了程序实现。
+图~\ref{fig:nr-active-power}中各节点计算有功与指定值的
+最大绝对偏差为 $7.187\times10^{-7}$~p.u.，
+图~\ref{fig:nr-reactive-power}中非 PQ 节点无功的
+最大绝对偏差为$8.955\times10^{-7}$~p.u.，
+两项偏差均小于 $10^{-6}$，
+说明计算功率与标准结果具有较高一致性。
+
+为进一步验证收敛结论不依赖某一个容差设置，对 IEEE 118 节点系统分别采用
+$10^{-4}$、$10^{-6}$、$10^{-8}$ 和 $10^{-10}$ 四档收敛精度进行计算，结果如
+图~\ref{fig:nr-118-tolerance-accuracy}所示。
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.95\textwidth]{IEEE_118_Deviation_vs_Convergence_Tolerance.png}
+\caption{IEEE 118 节点系统 NR 方程残差与收敛精度校核}
+\label{fig:nr-118-tolerance-accuracy}
+\end{figure}
+
+在 $10^{-4}$ 精度下，NR 经 3 次迭代即达到 $3.234\times10^{-6}$~p.u. 的最大方程
+失配，已经满足终止条件；当容差收紧至 $10^{-6}$、$10^{-8}$ 和 $10^{-10}$ 时，
+第 4 次迭代后的最大方程失配均约为 $3.892\times10^{-13}$~p.u.，远低于相应的目标
+精度。其原因在于 NR 进入解附近的局部收敛区域后具有近二次收敛性质，误差近似满足
+$e_{k+1}\approx C e_k^2$，因此增加一次迭代即可使残差下降多个数量级。三档严格容差
+得到相同的迭代次数和最终残差，也说明第 4 次迭代已经一次性越过了 $10^{-6}$ 至
+$10^{-10}$ 的全部判据。
+
+综上，跨算例扫描证明了当前 NR 实现对所有已有节点系统均能成功收敛；118 节点精度
+扫描则进一步表明，不同收敛精度下的最终方程残差均满足要求。结合电压、相角和功率
+结果与标准数据的高度一致性，可以确认当前 NR 求解结果在收敛性和计算精度两方面均
+通过校核。
+
+\subsection{NR法与FDLF法的详细比较}
+
+为比较两种方法的迭代特征和规模适应性，在相同输入数据、平坦启动、$10^{-6}$
+收敛容差和重复计时规则下，对现有 13 个 IEEE 测试系统分别运行 NR 与 FDLF。
+全算例结果如图~\ref{fig:all-cases-comparison}所示。
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\textwidth]{Solver_All_Cases_Summary.png}
+\caption{NR 与 FDLF 在全部 IEEE 算例上的迭代次数、观测收敛阶和中位耗时}
+\label{fig:all-cases-comparison}
+\end{figure}
+
+从迭代次数看，NR 在全部算例中使用 3--5 次迭代完成求解，迭代次数随系统规模增长
+变化较小；FDLF 则需要 5--24 次迭代，并在 43、145、162 和 300 节点等较大算例中
+增幅更明显。这是因为 NR 每轮利用完整雅可比矩阵同时修正电压相角与幅值，而 FDLF
+忽略 $P$--$V$ 和 $Q$--$\theta$ 的弱耦合项，以近似不变的解耦矩阵进行交替修正，
+因而单轮修正能力较弱，通常需要更多迭代。
+
+\begin{figure}[H]
 \centering
 \includegraphics[width=\textwidth]{Solver_118_NR_FDLF_Comparison.png}
 \caption{IEEE 118 节点系统 NR 与 FDLF 的收敛和耗时分解}
 \label{fig:118-comparison}
 \end{figure}
 
-图~\ref{fig:118-comparison}进一步说明，NR 的主要开销集中在线性求解与回代，FDLF 的主要开销集中在固定矩阵的预处理。NR 的残差在后期快速下降，体现局部二次收敛；FDLF 则保持近线性下降。二者最终状态的一致性应通过母线电压、相角和功率残差共同校核。
+在 IEEE 118 节点算例中，NR 和 FDLF 分别用 4 次和 8 次迭代达到 $10^{-6}$ 精度。
+图中横轴表示误差样本序号，第 1 个点是尚未更新状态时的初始残差，因此第 5 个误差点
+对应完成第 4 次 Newton 修正。NR 的残差在后两次修正中由约 $10^{-2}$ 快速下降至
+$10^{-13}$ 量级，其逐步观测阶接近 2；FDLF 的残差则近似按固定比例下降，后期观测阶
+稳定在 1 附近。该局部曲线与全算例统计相互印证。
 
-\subsection{鲁棒性与临界状态}
+重复计时结果中，NR 的中位耗时为 71.400~ms，FDLF 为 6.983~ms，后者在当前代码、
+算例和运行环境下约快 10.2 倍。耗时分解表明，NR 约 $94.8\%$ 的平均耗时集中在完整
+线性方程组求解与回代；FDLF 的主要开销约 $66.7\%$ 用于固定解耦矩阵的预处理，另有
+约 $26.0\%$ 用于功率不平衡量计算。FDLF 虽以更多迭代换取收敛，但其系数矩阵可以
+复用，使单轮成本显著低于当前 NR 实现。该结论反映当前稠密线性代数实现，若 NR 改用
+稀疏分解或符号分解复用，实际耗时比例还会改变。
 
-常规初值扰动下两种算法均保持较高成功率。负荷逼近临界区域或线路 $R/X$ 增大后，FDLF 的迭代次数与失败概率增长更明显。最优乘子和非线性规划虽然能抑制发散，但若最终残差高于阈值，只能判定为残差停滞，不能视为潮流收敛。
+\subsubsection{观测收敛阶的定义与含义}
 
-\begin{figure}[p]
+设第 $k$ 次迭代后的最大功率失配为 $e_k$。若迭代误差在解附近近似满足
+\begin{equation}
+  e_{k+1}\approx C e_k^p,
+\end{equation}
+其中 $C$ 为渐近误差常数，$p$ 称为收敛阶。在不知道精确解的情况下，可由连续三次
+迭代估计局部观测收敛阶：
+\begin{equation}
+  \widehat p_k=
+  \frac{\ln(e_{k+1}/e_k)}{\ln(e_k/e_{k-1})}.
+  \label{eq:observed-convergence-order}
+\end{equation}
+
+$p\approx1$ 表示线性收敛，即误差每轮大致按固定比例缩小；$p\approx2$ 表示二次
+收敛，即进入局部收敛区后误差量级近似平方下降。
+
+图~\ref{fig:all-cases-comparison}中，NR 的观测阶大多分布在约 1.8--2.0 附近，整体
+贴近 $p=2$ 参考线；FDLF 的观测阶基本位于 0.9--1.0 附近，贴近 $p=1$ 参考线。
+因此，跨算例结果与“NR 在近解区呈二次收敛、FDLF 主要呈线性收敛”的理论判断一致。
+尽管 FDLF 迭代次数更多，其全部算例的中位耗时在当前实现中仍普遍低于 NR，说明迭代
+次数虽然多但是每轮不需要重构完整雅可比矩阵用时较少。
+
+\subsubsection{初值、临界负荷与线路参数鲁棒性}
+
+\begin{figure}[H]
 \centering
 \includegraphics[width=\textwidth]{Solver_118_Robustness.png}
-\caption{IEEE 118 节点系统的初值、负荷与线路参数鲁棒性}
-\label{fig:robustness}
+\caption{IEEE 118 节点系统 NR 与 FDLF 的初值、负荷及线路参数鲁棒性}
+\label{fig:solver-robustness-comparison}
 \end{figure}
 
-\begin{figure}[p]
-\centering
-\includegraphics[width=\textwidth]{Solver_118_Critical_Stagnation.png}
-\caption{IEEE 118 节点系统在参考鼻点前后的残差与控制量}
-\label{fig:critical}
+由图~\ref{fig:solver-robustness-comparison}可见，在数据给定初值、平坦初值以及三档随机
+电压和相角扰动下，两种算法的成功率均为 $100\%$，说明常规工况内二者对初值扰动均
+具有较好的容忍度。不过，NR 的成功试验平均迭代次数约为 2.0--5.2 次，FDLF 则约为
+5.0--8.3 次，NR 对初值变化的迭代次数更稳定。
+
+临界负荷扫描中，FDLF 的数值收敛边界约位于负荷倍率
+$[1.610625,\,1.610635]$，NR 则约位于 $[1.613799,\,1.613809]$。这说明接近鼻点、
+雅可比矩阵趋于病态时，FDLF 的解耦近似更早失效；但这两个数值边界依赖初值、容差和
+迭代上限，不能替代 CPF 给出的物理稳定极限。在线路电阻倍率由 1 增至 2 和 3 时，
+NR 的平均迭代次数保持在约 4 次，而 FDLF 从 8 次增加到 16 次和 31 次。线路 $R/X$
+增大削弱了有功--相角、无功--电压之间的解耦关系，因此 FDLF 对高电阻网络更敏感，
+NR 使用完整雅可比矩阵则表现出更强的鲁棒性。
+
+\subsection{最优乘子与非线性规划的非零残差停滞}
+
+最优乘子法（OM）和非线性规划法（NLP）通过步长控制抑制临界区附近的迭代发散，
+因而有可能扩大直接迭代法的数值收敛范围。
+
+图~\ref{fig:om-nlp-stagnation-boundary}给出了 IEEE 118 节点系统的粗扫描及二分细化结果。
+左图以 $100\%$ 和 $0\%$ 分别表示严格收敛与失败，阴影窄带为最后收敛点和首个失败点
+之间的夹逼区间；右图给出每个负荷倍率对应的最终最大功率失配，叉号表示求解器失败
+或停滞。两种方法在临界区之前均能将残差降至阈值以下，而跨过约 $1.6138$ 后，残差
+突增至 $10^{-5}$ 量级并停止下降。
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\textwidth]{Solver_118_OM_NLP_Stagnation_Boundaries.png}
+  \caption{IEEE 118 节点系统中最优乘子法与非线性规划法的严格收敛--非零残差停滞边界}
+  \label{fig:om-nlp-stagnation-boundary}
 \end{figure}
 
-这里需要特别区分\textbf{物理稳定极限}与\textbf{数值收敛边界}。CPF 参考鼻点来自连续解分支；NR 或 FDLF 的最后收敛倍率则依赖初值、容差、迭代上限和 PV--PQ 转换规则。两者定义不同，若固定点算法在参考鼻点后仍返回结果，应优先核查方程集合、最终残差和解支，而不能直接提高系统稳定极限。
+\begin{table}[htbp]
+  \centering
+  \caption{IEEE 118 节点系统中 OM 与 NLP 的收敛--停滞边界}
+  \label{tab:om-nlp-stagnation-boundary}
+  \begin{tabular}{lccccc}
+    \toprule
+    方法 & 最后收敛倍率 & 收敛残差 & 首个停滞倍率 & 停滞残差 & 停止机制 \\
+    \midrule
+    OM  & 1.61379688 & $2.152\times10^{-9}$ & 1.61380469 & $9.919\times10^{-6}$ & 乘子趋零 \\
+    NLP & 1.61379688 & $8.977\times10^{-9}$ & 1.61380469 & $1.152\times10^{-5}$ & 回溯耗尽 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
 
-\subsection{规模增长特征}
+由表~\ref{tab:om-nlp-stagnation-boundary}可知，两种方法得到相同的边界夹逼区间
+$[1.61379688,\,1.61380469]$，区间宽度仅为 $7.812\times10^{-6}$。结合
+图~\ref{fig:solver-robustness-comparison}中的边界可作进一步比较：FDLF 的最后收敛倍率
+约为 $1.610625$，这说明在解耦近似已经失效的窄临界区内，
+步长控制仍可抑制直接更新造成的发散，使迭代继续逼近潮流解。
+另一方面，NR 的边界为$[1.613799,\,1.613809]$，与 OM、NLP 的区间几乎重合。
+因此，本算例能够证明在统一负荷倍率下，小节点系统的 OM 与 NLP相对 FDLF 具有一定的收敛范围扩展，
+但二者没能完整雅可比 NR 法的数值边界。
 
-当前结果显示，系统规模增大后矩阵构造与分解成本迅速增长。后续采用稀疏矩阵装配、稀疏分解和符号分解复用具有明确价值。
+\subsection{连续潮流法的参数化比较}
+为区分“程序能够运行”和“参数化在复杂算例中能够可靠保持解支”这两个层次，
 
-\begin{figure}[p]
-\centering
-\includegraphics[width=\textwidth]{Solver_Scaling_Trend.png}
-\caption{网络拓扑、矩阵非零元及求解耗时的规模增长趋势}
-\label{fig:scaling}
+本小节将 CPF 图片分为两组。
+其中 IEEE 30 节点算例用于证明本CPF代码可以完成基本功能，其余正常运行的节点算例不做过多赘述；
+而 IEEE 118、162 节点算例则作为对比各种参数化策略的对比范例，
+依次暴露固定负荷参数、单一局部电压坐标、二维投影方向判据在高维潮流解流形上的局限等各参数化策略的缺点。
+
+图中蓝线按实际接受顺序连接校正后的潮流解，
+蓝点为接受点，红点为程序识别的首次负荷参数局部极大点。
+因此，点的疏密反映步长控制的直接结果；
+曲线是否连续、是否出现不符合相邻切向方向的大跨度跳转，
+则用于判断算法是否仍沿同一局部解支前进。
+需要特别说明，不同图片可能由不同的自动监视母线绘制，
+故纵坐标的绝对电压不能跨图直接比较，比较重点应放在轨迹
+连续性、鼻点负荷倍率以及接受点分布上。
+
+\subsubsection{IEEE 30 节点算例：五种实现的功能基线}
+
+图~\ref{fig:cpf-ieee30-right}表明，五种参数化均能从基准工况沿上半支稳定推进，
+且在负荷倍率约 $1.52$ 处得到相互接近的极限位置。
+自然参数化按固定$\Delta\lambda$ 前进，能够逼近鼻点但不负责沿折返后的低电压支路继续追踪；
+其余四种方法均允许 $\lambda$ 在增广校正中变化，因而能够越过鼻点。
+局部电压法、弧长法、切线角法和绝对 $V/P$ 角法得到的红色鼻点集中在很窄的区间内，
+说明五套预测--校正方程的符号、负荷增长方向和基本校正逻辑是一致的。
+后续 118、162 节点算例中的异常是在系统维数增加、解支曲率增大以后才显现的参数化适用性问题。
+
+\begin{figure}[htbp]
+  \centering
+  \begin{minipage}{0.32\textwidth}
+    \centering
+    \includegraphics[width=\linewidth]{CPF/right/natural_IEEE_030_CPF_01_PV_Curve.png}\\[-0.3em]
+    \small (a) 自然参数化
+  \end{minipage}\hfill
+  \begin{minipage}{0.32\textwidth}
+    \centering
+    \includegraphics[width=\linewidth]{CPF/right/local_voltage_IEEE_030_CPF_01_PV_Curve.png}\\[-0.3em]
+    \small (b) 局部电压参数化
+  \end{minipage}\hfill
+  \begin{minipage}{0.32\textwidth}
+    \centering
+    \includegraphics[width=\linewidth]{CPF/right/pseudo_arclength_IEEE_030_CPF_01_PV_Curve.png}\\[-0.3em]
+    \small (c) 弧长参数化
+  \end{minipage}
+
+  \vspace{0.5em}
+  \begin{minipage}{0.32\textwidth}
+    \centering
+    \includegraphics[width=\linewidth]{CPF/right/tangent_angle_IEEE_030_CPF_01_PV_Curve.png}\\[-0.3em]
+    \small (d) 切线角参数化
+  \end{minipage}\hspace{0.02\textwidth}
+  \begin{minipage}{0.32\textwidth}
+    \centering
+    \includegraphics[width=\linewidth]{CPF/right/absolute_vp_angle_IEEE_030_CPF_01_PV_Curve.png}\\[-0.3em]
+    \small (e) 绝对 $V/P$ 角参数化
+  \end{minipage}
+  \caption{IEEE 30 节点系统中五种参数化方法的正常运行结果}
+  \label{fig:cpf-ieee30-right}
 \end{figure}
 
-以节点数不少于 30 的算例拟合，当前实现中 NR 总耗时和单轮耗时对状态维数的增长指数分别约为 2.85 和 2.67，FDLF 分别约为 2.52 和 2.03。该结果说明当前实现仍带有明显的稠密线性代数特征，稀疏化是比微调迭代公式更优先的工程改进方向。
+\subsubsection{自然参数化：固定负荷坐标在鼻点附近失效}
 
-\clearpage
+自然参数化的附加方程为
+\begin{equation}
+  g_{\lambda}=\lambda-\lambda^{\mathrm{pred}}=0.
+\end{equation}
+它将校正限制在固定 $\lambda$ 的截面上——即垂直校正；
+远离鼻点时，解支可以写成单值函数$\bm{x}=\bm{x}(\lambda)$，
+这种垂直校正最简单；但在鞍结分岔点附近，
+$\mathrm{d}\bm{x}/\mathrm{d}\lambda$ 迅速增大，普通潮流雅可比矩阵趋近奇异，
+同一固定 $\lambda$ 截面还可能与不同局部解支相交。
+此时，即使 Newton 校正最后满足
+残差阈值，也不能证明校正点与上一接受点属于同一连续分支。
+
+图~\ref{fig:cpf-natural-wrong}清楚展示了这一问题。
+IEEE 118 算例中，自然参数化在临界区域之后形成不可信的分支，
+并将倍率约 $1.6771$ 的点误标为极限；
+该数值明显偏离后续局部电压、弧长和切线角方法共同给出的 $1.6074$ 附近。
+IEEE 162 算例的问题更为明显：母线电压先下降，随后直接越过鼻点产生一个较大的垂直校正，
+突然转入电压超过 $2$~p.u. 的高电压支路，并把倍率$1.3938$ 附近的点当作鼻点。
+这并非合理的电压崩溃轨迹，而是固定负荷截面在病态区无法提供可靠方向信息后，校正器进入了另一个数学解支。
+由此可见，CPF 的正确性不能只检查每个点的潮流残差，还必须检查相邻解点之间的连续性和切向方向，
+这也是后面我做其他参数化选择的依据。
+
+\begin{figure}[htbp]
+  \centering
+  \begin{minipage}{0.49\textwidth}
+    \centering
+    \includegraphics[width=\linewidth]{CPF/wrong/01_natural_IEEE_118_CPF_01_PV_Curve.png}\\[-0.3em]
+    \small (a) IEEE 118：错误回环与极限高估
+  \end{minipage}\hfill
+  \begin{minipage}{0.49\textwidth}
+    \centering
+    \includegraphics[width=\linewidth]{CPF/wrong/01_natural_IEEE_162_CPF_01_PV_Curve.png}\\[-0.3em]
+    \small (b) IEEE 162：跳入非物理高电压解支
+  \end{minipage}
+  \caption{自然参数化在 IEEE 118 与 IEEE 162 节点系统中的错误分支现象}
+  \label{fig:cpf-natural-wrong}
+\end{figure}
+
+\subsubsection{局部电压参数化：能够修正 IEEE 118，但尚不足以处理 IEEE 162}
+
+局部电压参数化选取一个敏感 PQ 母线 $k$，以
+\begin{equation}
+  g_V=V_k-V_k^{\mathrm{pred}}=0,
+  \qquad \frac{\mathrm{d}V_k}{\mathrm{d}s}<0
+\end{equation}
+代替固定 $\lambda$。这样，预测步始终沿参数母线的低电压方向推进，而负荷参数
+$\lambda$ 可以在校正过程中自由改变。对以局部电压下降为主导的鞍结分岔，
+$V_k$ 在鼻点附近仍可作为良好的局部坐标，因此能够绕过自然参数化的奇异方向。
+在 IEEE 118 算例中，局部电压法避开了自然参数化的错误分支，成功得到鼻点后的低电压解点，
+修正后的鼻点为约 $1.6065$，如图~\ref{fig:cpf-local-comparison}(a) 所示。
+
+然而，IEEE 162 的图像仍出现折线和复杂换向，
+由于程序只要求参数母线$V_k$ 单调下降，不要求所有母线电压同时下降；若绘图母线与参数母线不同，
+网络耦合和无功重新分配完全可能使绘图母线在低压支路上局部回升。
+这说明单个 $V_k$ 尚不能唯一刻画该系统的
+高维解流形。其原因是局部参数化只控制一个坐标分量；当主要变化方向从所选母线转移到
+其他电压或相角分量时，即便 $V_k$ 继续下降，完整状态
+$[\bm{\theta}^{\mathsf T},\bm{V}^{\mathsf T},\lambda]^{\mathsf T}$ 仍可能大幅转向。
+因此，局部电压法对 IEEE 118 有效，却没有彻底纠正 IEEE 162，方法效果依赖参数母线
+是否在整个目标区间内持续保持代表性。
+
+\begin{figure}[htbp]
+  \centering
+  \begin{minipage}{0.49\textwidth}
+    \centering
+    \includegraphics[width=\linewidth]{CPF/wrong/02_local_voltage_IEEE_118_CPF_01_PV_Curve.png}\\[-0.3em]
+    \small (a) IEEE 118：成功越过鼻点
+  \end{minipage}\hfill
+  \begin{minipage}{0.49\textwidth}
+    \centering
+    \includegraphics[width=\linewidth]{CPF/wrong/02_local_voltage_IEEE_162_CPF_01_PV_Curve.png}\\[-0.3em]
+    \small (b) IEEE 162：单一电压坐标仍不足
+  \end{minipage}
+  \caption{局部电压参数化对 IEEE 118 与 IEEE 162 节点系统的不同修正效果}
+  \label{fig:cpf-local-comparison}
+\end{figure}
+
+\subsubsection{弧长参数化：步长更均匀，但不主动判别目标解支}
+
+弧长法不再选取某个单独状态量，而是使用上一接受点的完整切向量
+$\bm{t}_{i-1}$ 构造法平面：
+\begin{equation}
+  g_s=
+  \bm{t}_{i-1}^{\mathsf T}
+  \left(
+  \begin{bmatrix}\bm{x}\\\lambda\end{bmatrix}
+  -
+  \begin{bmatrix}\bm{x}^{\mathrm{pred}}\\\lambda^{\mathrm{pred}}\end{bmatrix}
+  \right)=0.
+\end{equation}
+由于参数化是扩展空间的弧长，图~\ref{fig:cpf-pseudo-comparison}中，相邻蓝点沿整条轨迹的距离比自然参数化和局部电压法更均匀，
+特别是在曲率较平缓的区段不会过度堆积，IEEE 118 的鼻点稳定在约 $1.6074$，与局部电压法相互印证。
+
+但“弧长参数化”没有限制“物理上只允许一个鼻点”。IEEE 162 的低电压区域仍出现二次折返：
+弧长法追踪的是整条曲线，能够以较均匀的步长迭代，但不能特别识别单鼻点支路，
+有可能继续追踪完整的多折点数学解支。
+因此，弧长法的主要优势是通用、稳健和步长分布均匀；
+其局限是缺少针对特定鼻点区域的主动加密指标，也不能仅凭弧长连续性排除所有不希望进入的局部分支。
+
+\begin{figure}[htbp]
+  \centering
+  \begin{minipage}{0.49\textwidth}
+    \centering
+    \includegraphics[width=\linewidth]{CPF/wrong/03_pseudo_arclength_IEEE_118_CPF_01_PV_Curve.png}\\[-0.3em]
+    \small (a) IEEE 118：均匀越过鼻点
+  \end{minipage}\hfill
+  \begin{minipage}{0.49\textwidth}
+    \centering
+    \includegraphics[width=\linewidth]{CPF/wrong/03_pseudo_arclength_IEEE_162_CPF_01_PV_Curve.png}\\[-0.3em]
+    \small (b) IEEE 162：均匀追踪多折点结构
+  \end{minipage}
+  \caption{弧长参数化的步长分布及复杂解支现象}
+  \label{fig:cpf-pseudo-comparison}
+\end{figure}
+
+\subsubsection{切线角参数化：鼻点加密与高维方向连续性修正}
+
+切线角法利用监视母线在 $P$--$V$ 平面中的切向方向
+\begin{equation}
+  \bm{t}_{PV}=
+  \begin{bmatrix}
+    \mathrm{d}\lambda/\mathrm{d}s\\[0.2em]
+    \mathrm{d}V_k/\mathrm{d}s
+  \end{bmatrix},
+  \qquad
+  \phi=\operatorname{atan2}\,
+  \left(\frac{\mathrm{d}V_k}{\mathrm{d}s},
+        \frac{\mathrm{d}\lambda}{\mathrm{d}s}\right)
+\end{equation}
+描述曲线转向。当 $|\cos\phi|$ 变小时，切线趋近竖直，即系统接近首次负荷极大点；
+程序据此自动缩小预测步长。图~\ref{fig:cpf-tangent-118}显示，IEEE 118 鼻点附近的
+接受点明显加密，而远离鼻点时保持较大步长。
+这种角度参数化比纯弧长法更适合精细定位极限点。
+其代价也很明确：每一步都要构造并求解增广切线方程，
+鼻点附近还会主动增加接受点和校正次数，因而在大规模系统中总体计算量较大。
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.72\textwidth]{CPF/wrong/04_tangent_angle_IEEE_118_CPF_01_PV_Curve.png}
+  \caption{切线角参数化在 IEEE 118 节点系统鼻点附近的自适应加密}
+  \label{fig:cpf-tangent-118}
+\end{figure}
+
+切线角法的初步实现仍在 IEEE 162 算例中进入了另一解支，如图
+~\ref{fig:cpf-tangent-162-fix}(a) 所示。看起来这对于角度参数化是不相符的，
+角度参数化相比于弧长参数化的优点就在于其不仅定义了曲线连续，并且对曲线光滑与凹凸性做了一定的约束。
+但是在仔细检查与深入思考后，问题的本质应当是单母线二维投影不能充分表示高维曲线的光滑。记完整切向量为
+\begin{equation}
+  \bm{t}=
+  \begin{bmatrix}
+    \bm{t}_{\theta}^{\mathsf T} &
+    \bm{t}_{V}^{\mathsf T} &
+    t_{\lambda}
+  \end{bmatrix}^{\mathsf T},
+\end{equation}
+二维投影算子为
+$\Pi_k\bm{t}=[t_{\lambda},\,t_{V_k}]^{\mathsf T}$。
+即使相邻投影满足
+\begin{equation}
+  (\Pi_k\bm{t}_{i-1})^{\mathsf T}
+  (\Pi_k\bm{t}_{i})>0,
+\end{equation}
+也不能推出
+$\bm{t}_{i-1}^{\mathsf T}\bm{t}_{i}>0$ 且接近上一方向。原因在于
+$\Pi_k$ 丢弃了其余所有母线的相角和电压分量；两个向量在二维投影中可以几乎平行，
+在被丢弃的高维空间中却可能接近正交甚至反向。本算例的异常步中，单母线
+$P$--$V$ 投影方向余弦仍为 $0.9284$，但完整状态切线方向余弦仅为 $0.013228$，
+即高维方向已经转动到接近正交。原判据只看到前者，Newton 校正又恰好收敛，
+于是错误解支被作为正常点接受。
+
+修订后，程序增加完整状态切线余弦
+\begin{equation}
+  c_i=
+  \frac{\bm{t}_{i-1}^{\mathsf T}\bm{t}_i}
+       {\|\bm{t}_{i-1}\|_2\,\|\bm{t}_i\|_2}
+\end{equation}
+作为分支连续性指标。当 $c_i<0.20$ 时，拒绝当前切线角预测，并切换为以完整状态
+切向量定向的弧长参数化；若研究目标是报告传统单鼻点曲线，则在首次鼻点之后检测到
+$\mathrm{d}\lambda/\mathrm{d}s$ 的非预期第二次换向时，于换向前终止。图
+~\ref{fig:cpf-tangent-162-fix}(b)显示，修订轨迹在首次鼻点之后连续进入低电压支路，
+并在二次换向前停止，不再保留初版中进入另一局部分支后的轨迹。
+
+\begin{figure}[htbp]
+  \centering
+  \begin{minipage}{0.49\textwidth}
+    \centering
+    \includegraphics[width=\linewidth]{CPF/wrong/04_tangent_angle_IEEE_162_CPF_01_PV_Curve_1.png}\\[-0.3em]
+    \small (a) 初版：二维投影方向正确但进入另一解支
+  \end{minipage}\hfill
+  \begin{minipage}{0.49\textwidth}
+    \centering
+    \includegraphics[width=\linewidth]{CPF/wrong/04_tangent_angle_IEEE_162_CPF_01_PV_Curve_2.png}\\[-0.3em]
+    \small (b) 修订：全状态余弦保护与二次换向终止
+  \end{minipage}
+  \caption{IEEE 162 节点系统中切线角法的错误分支原因与修正结果}
+  \label{fig:cpf-tangent-162-fix}
+\end{figure}
+
+\subsubsection{绝对 \texorpdfstring{$V/P$}{V/P} 角参数化：面向极限点定位的补充}
+
+绝对 $V/P$ 角参数化受参考论文中绝对角参数思想的启发\cite{lilin2011}，并针对 IEEE 145 节点算例
+负荷裕度极小、切线转向判据分辨率不足的问题作了实现上的补充。该方法不使用相邻两点
+切向量之间的相对夹角，而是以当前解点在归一化负荷--电压平面中的绝对极角
+\begin{equation}
+  \alpha=\operatorname{atan2}\left(V_k,\,1+\lambda\right)
+  \label{eq:cpf-absolute-vp-angle}
+\end{equation}
+作为延拓参数目标。对于本文所研究的典型反 C 型 $P$--$V$ 曲线，解支越过鼻点时
+$\lambda$ 的推进方向会发生反转，而绝对极角 $\alpha$ 仍可相对于固定负荷轴保持连续定向的变化，因此，
+以 $\alpha$ 作为延拓坐标可以稳定越过鼻点。
+
+IEEE 145 节点算例的特殊性首先表现为负荷裕度极小。各方法得到的临界负荷倍率均位于
+\(1.0204\) 附近，即从基准点到极限点的负荷增长仅约 \(2.04\%\)。与此同时，图中母线
+123 的电压只由约 \(1.0171\)~p.u. 缓慢降至 \(1.0136\)~p.u.，二维投影近似为一条
+斜直线，没有 IEEE 30、118 算例中清楚可见的 ``C'' 形折返。
+
+对于两类常用的鼻点判据。第一类是仅依据离散负荷增量\(\Delta\lambda\) 的符号变化识别鼻点；
+当相邻点的 \(\Delta\lambda\) 已经接近数值误差量级时，一次很小的校正扰动就可能造成虚假的正负换向。
+第二类是依据相邻切向量计算局部切线角；当所选二维投影本身几乎退化为直线时，局部角度变化很小，
+难以为鼻点加密提供稳定触发信号。局部电压参数化也面临类似问题：若所选 \(V_k\) 在该区间内变化过小，
+不能算是一种良好的参数化选择。
+
+绝对角 \(\alpha\) 的优势在于使用相对于固定负荷轴的当前位置，而不是把本步判断完全
+建立在两个相邻点的微小差分上。对式~\eqref{eq:cpf-absolute-vp-angle}作一阶微分可得
+\begin{equation}
+  \mathrm{d}\alpha
+  =
+  \frac{(1+\lambda)\,\mathrm{d}V_k
+        -V_k\,\mathrm{d}\lambda}
+       {(1+\lambda)^2+V_k^2}.
+  \label{eq:cpf-absolute-vp-angle-differential}
+\end{equation}
+它同时利用电压和负荷两个方向的信息。因而，一次幅值很小
+且与整体轨迹不一致的 \(\Delta\lambda\) 换向不会单独决定参数方向；只要绝对角目标仍按
+规定方向变化，预测--校正过程就可以继续逼近极限区。即绝对角法相对“只看
+\(\lambda\) 换向”的判据更不易发生单点误判，将其与 \(\mathrm{d}V_k\) 联合衡量，
+降低了单独依赖 \(\lambda\) 符号的敏感性。
+
+表~\ref{tab:cpf-ieee145-parameterization}进一步区分了“到达极限附近”和“可靠完成
+越鼻追踪”。自然参数化和局部电压参数化分别只接受 6 个和 4 个点，最终均在最小步长
+处校正失败，因此它们的末点虽然接近 \(1.0204\)，却不能作为可靠鼻点。
+弧长法、切线角法和绝对角法分别得到\(1.02037956\)、\(1.02038746\) 与 \(1.02038759\)。
+其中，绝对角法以 29 个接受点完成追踪，少于弧长法和切线角法的 35 个与 34 个接受点。
+需要注意，接受点数反映的是延拓轨迹的
+离散点数量，并不等同于校正器内部的牛顿迭代总次数。
+
+\begin{table}[htbp]
+  \centering
+  \small
+  \caption{IEEE 145 节点系统中五种参数化方法的极限追踪结果}
+  \label{tab:cpf-ieee145-parameterization}
+  \begin{tabular}{lccccc}
+    \toprule
+    参数化方法 & 接受点 & 完成状态 & 鼻点倍率 
+       \\
+    \midrule
+    自然参数化           & 6  & 未完成 & 未可靠识别 
+       \\
+    局部电压参数化       & 4  & 未完成 & 未可靠识别 
+       \\
+    弧长参数化           & 35 & 完成   & 1.02037956 
+      \\
+    切线角参数化         & 34 & 完成   & 1.02038746 
+       \\
+    绝对 $V/P$ 角参数化  & 29 & 完成   & 1.02038759 
+       \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+
+\begin{figure}[htbp]
+  \centering
+  \begin{minipage}{0.49\textwidth}
+    \centering
+    \includegraphics[width=\linewidth]{CPF/IEEE_145/natural_IEEE_145_CPF_01_PV_Curve.png}\\[-0.3em]
+    \small (a) 自然参数化：极限前可用点较少
+  \end{minipage}\hfill
+  \begin{minipage}{0.49\textwidth}
+    \centering
+    \includegraphics[width=\linewidth]{CPF/IEEE_145/absolute_vp_angle_IEEE_145_CPF_01_PV_Curve.png}\\[-0.3em]
+    \small (b) 绝对 $V/P$ 角：极限附近加密
+  \end{minipage}
+  \caption{IEEE 145 节点系统中自然参数化与绝对 $V/P$ 角参数化的极限区点分布}
+  \label{fig:cpf-absolute-145}
+\end{figure}
+
+但同时应该注意到，单一母线的 \(P\)--\(V\) 图像中鼻点不明显，不能直接解释为
+系统不存在鞍结分岔。完整潮流解流形的临界方向通常同时包含多个母线电压和相角分量，
+同一高维折叠对不同母线的二维投影具有不同的表征。
+图~\ref{fig:cpf-145-selected-bus-comparison}给出了临界电压方向中分量较大的六个代表母线。
+其中，母线 138 经纵轴局部放大后呈现出较清楚的转向，而母线 120、123、125、127
+和 92 的完整曲线仍近似直线，说明仅凭某一个母线投影的外观不足以判断完整状态空间
+中是否存在极限点。
+
+需要进一步区分的是，“折返在图中不明显”并不等同于该母线对临界方向不敏感。
+本文将潮流雅可比矩阵最小奇异值对应右奇异向量中的电压部分称为临界电压分量，
+并以 96 个 PQ 母线临界电压分量绝对值的最大值作为归一化基准。诊断结果表明，
+母线 123 的临界电压分量排名第 3，约为该最大分量的 \(50.7\%\)。因此，本算例中
+鼻点难以从母线 123 的完整曲线上直接辨认，
+主要是因为鼻点邻域的负荷倍率变化仅为 \(10^{-7}\) 量级，使鼻点两侧解支在当前横轴
+尺度和线宽下近似重合，从而呈现近似直线的折返图形。
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\textwidth]{CPF/IEEE_145/absolute_vp_angle_IEEE_145_Selected_Buses_PV_Comparison.png}
+  \caption{IEEE 145 节点系统中六个代表母线的 \(P\)--\(V\) 投影比较}
+  \label{fig:cpf-145-selected-bus-comparison}
+\end{figure}
+
+\subsubsection{综合比较}
+
+上述结果形成了由简单到稳健的递进关系。
+自然参数化计算结构最简单，适合上半支和远离极限点的区段，
+但固定 $\lambda$ 无法处理鼻点折返；
+局部电压参数化以一个敏感节点电压替代 $\lambda$，
+能够纠正 IEEE 118，却仍受单坐标代表性的限制；
+弧长参数化使用完整状态--负荷联合空间的法平面，通用性和步长均匀性最好，
+但不会主动区分研究者希望保留的单鼻点支路与后续多折点结构；
+切线角参数化能够依据几何转向在鼻点附近合理加密，代价是增广求解和加密带来更大计算量，
+并且必须用完整状态余弦弥补单母线二维投影的信息损失；
+绝对 $V/P$ 角参数化具有固定参考轴，主要用于提升小负荷裕度鼻点的定位分辨率。
+
+最后，结论是实际应采用分层策略：
+正常区间可使用自然参数化快速推进；出现固定负荷坐标病态时切换局部电压或弧长法；
+需要精确定位鼻点时使用切线角或绝对 $V/P$ 角进行自适应加密；所有基于低维投影的
+方向判据均由完整状态切线连续性检查保护，必要时由弧长法接管。该策略同时利用了局部
+参数化的针对性、弧长法的通用性和角度参数化的极限点分辨能力。

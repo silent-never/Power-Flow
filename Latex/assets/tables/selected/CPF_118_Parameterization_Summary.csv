@@ -1,0 +1,6 @@
+﻿parameterization,label,success,accepted_points,failed_attempts,nose_detected,nose_load_multiplier,nose_min_pq_voltage,post_nose_points,used_pseudo_fallback,elapsed_seconds,stop_reason
+natural,自然参数化,False,27,13,False,1.6771189263,0.7336792424,0,False,55.372146,校正失败且当前已是最小步长
+local_voltage,局部电压参数化,False,23,12,True,1.6065113655,0.6908525491,13,False,53.933165,校正失败且当前已是最小步长
+pseudo_arclength,伪弧长参数化,True,55,0,True,1.6074262422,0.6725295521,20,False,29.403891,已越过鼻点并继续跟踪 20 个收敛点
+tangent_angle,切线角参数化,True,44,0,True,1.6074310935,0.6735290984,20,False,20.821847,已越过鼻点并继续跟踪 20 个收敛点
+absolute_vp_angle,绝对 V/P 角参数化,True,33,12,True,1.6074136705,0.6714476840,20,True,56.870962,已越过鼻点并继续跟踪 20 个收敛点

@@ -9,6 +9,7 @@ import numpy as np
 from ..core.grid import PowerGrid
 from .parameter import (
     ABSOLUTE_VP_ANGLE_PARAMETERIZATION,
+    LOCAL_VOLTAGE_PARAMETERIZATION,
     NATURAL_PARAMETERIZATION,
     PSEUDO_ARCLENGTH_PARAMETERIZATION,
     TANGENT_ANGLE_PARAMETERIZATION,
@@ -331,6 +332,80 @@ def _resolve_tangent_angle_bus_index(
     return bus_index
 
 
+def _resolve_local_voltage_bus_index(
+    grid: PowerGrid,
+    parameter_state: CPFParameterState,
+    voltage_indices: list[int],
+    natural_tangent: CPFTangent,
+) -> int:
+    """解析并保存局部电压参数化使用的 PQ 母线索引。"""
+    if parameter_state.local_voltage_bus_index is not None:
+        bus_index = parameter_state.local_voltage_bus_index
+    elif parameter_state.settings.local_voltage_bus > 0:
+        bus_number = parameter_state.settings.local_voltage_bus
+        if bus_number not in grid.idx_map:
+            raise ValueError(f"找不到局部电压参数化母线: {bus_number}")
+        bus_index = grid.idx_map[bus_number]
+    else:
+        sensitivities = np.abs(
+            grid.V[voltage_indices]
+            * natural_tangent.d_v_over_v[voltage_indices]
+        )
+        if sensitivities.size == 0:
+            raise ValueError("系统中没有可用于局部参数化的 PQ 母线")
+        bus_index = voltage_indices[int(np.argmax(sensitivities))]
+
+    if bus_index not in voltage_indices:
+        bus_number = int(grid.buses[bus_index]["number"])
+        raise ValueError(f"局部参数化母线 {bus_number} 必须是 PQ 母线")
+    parameter_state.local_voltage_bus_index = bus_index
+    return bus_index
+
+
+def _local_voltage_tangent(
+    grid: PowerGrid,
+    jacobian: np.ndarray,
+    lambda_derivative: np.ndarray,
+    parameter_state: CPFParameterState,
+    theta_indices: list[int],
+    voltage_indices: list[int],
+) -> CPFTangent:
+    """以选定 PQ 母线的电压幅值为局部延拓参数计算切向量。"""
+    natural = _natural_tangent(
+        grid,
+        jacobian,
+        lambda_derivative,
+        parameter_state.direction,
+        theta_indices,
+        voltage_indices,
+    )
+    bus_index = _resolve_local_voltage_bus_index(
+        grid,
+        parameter_state,
+        voltage_indices,
+        natural,
+    )
+    variable_count = jacobian.shape[0]
+    augmented_matrix = np.zeros(
+        (variable_count + 1, variable_count + 1), dtype=float
+    )
+    augmented_matrix[:variable_count, :variable_count] = jacobian
+    augmented_matrix[:variable_count, -1] = lambda_derivative
+    voltage_position = len(theta_indices) + voltage_indices.index(bus_index)
+    # 潮流状态采用 dV/V；乘以当前 V 后，末行固定实际电压变化率 dV/ds。
+    augmented_matrix[-1, voltage_position] = grid.V[bus_index]
+    right_hand_side = np.zeros(variable_count + 1)
+    right_hand_side[-1] = -float(parameter_state.direction)
+    augmented = np.linalg.solve(augmented_matrix, right_hand_side)
+    return _expand_tangent(
+        grid,
+        augmented[:-1],
+        augmented[-1],
+        theta_indices,
+        voltage_indices,
+    )
+
+
 def _resolve_absolute_vp_angle_bus_index(
     grid: PowerGrid,
     parameter_state: CPFParameterState,
@@ -534,6 +609,15 @@ def compute_tangent(
             jacobian,
             lambda_derivative,
             parameter_state.direction,
+            theta_indices,
+            voltage_indices,
+        )
+    if parameterization == LOCAL_VOLTAGE_PARAMETERIZATION:
+        return _local_voltage_tangent(
+            grid,
+            jacobian,
+            lambda_derivative,
+            parameter_state,
             theta_indices,
             voltage_indices,
         )

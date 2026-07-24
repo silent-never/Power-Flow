@@ -1,0 +1,6 @@
+﻿parameterization,label,repeat_count,mean_seconds,standard_deviation_seconds,min_seconds,max_seconds,accepted_points,success,used_pseudo_fallback
+natural,自然参数化,10,34.676654510,3.259920808,31.441499000,43.285249000,6,False,False
+local_voltage,局部电压参数化,10,32.875068630,3.064452013,30.032942000,39.916278000,4,False,False
+pseudo_arclength,伪弧长参数化,10,37.228333860,3.612300678,33.694483000,46.755341000,35,True,False
+tangent_angle,切线角参数化,10,50.918787520,4.549828933,47.816569800,63.410300000,34,True,True
+absolute_vp_angle,绝对 V/P 角参数化,10,45.234888650,1.450434884,43.210560000,48.425756800,29,True,True

@@ -40,6 +40,7 @@ class SolverConfig:
     )
     critical_stagnation_max_iterations: int = 60
     critical_stagnation_enforce_q_limits: bool = True
+    critical_stagnation_refinement_tolerance: float = 1e-5
     plot_dir: str = "output/plots"
     run_loadability_scan: bool = True
     load_multiplier_start: float = 1.0
@@ -50,6 +51,7 @@ class SolverConfig:
 
     # 连续潮流配置
     run_cpf: bool = True
+    cpf_all_cases: bool = False
     cpf_parameterization: str = "pseudo_arclength"
     cpf_lambda_init: float = 0.0
     cpf_lambda_min: float = -0.99
@@ -68,10 +70,13 @@ class SolverConfig:
     cpf_post_nose_steps: int = 20
     cpf_initial_direction: int = 1
     cpf_enforce_q_limits: bool = True
+    cpf_local_voltage_bus: int = 0
     cpf_tangent_angle_bus: int = 0
     cpf_tangent_angle_refinement: bool = True
     cpf_tangent_angle_refinement_cos_threshold: float = 0.35
     cpf_tangent_angle_refinement_min_step_ratio: float = 0.02
+    cpf_tangent_angle_full_state_cos_threshold: float = 0.20
+    cpf_tangent_angle_stop_at_second_lambda_turn: bool = True
     cpf_tangent_angle_pseudo_fallback: bool = True
     cpf_absolute_vp_angle_bus: int = 0
     cpf_absolute_vp_angle_pseudo_fallback: bool = True
@@ -209,6 +214,10 @@ def load_from_dict(values: dict[str, Any]) -> SolverConfig:
         raise ValueError("critical stagnation load multipliers must be positive")
     if config.critical_stagnation_max_iterations <= 0:
         raise ValueError("critical_stagnation_max_iterations must be positive")
+    if config.critical_stagnation_refinement_tolerance <= 0.0:
+        raise ValueError(
+            "critical_stagnation_refinement_tolerance must be positive"
+        )
     if not isinstance(config.critical_stagnation_enforce_q_limits, bool):
         raise ValueError("critical_stagnation_enforce_q_limits must be boolean")
     if config.load_multiplier_start <= 0:
@@ -221,6 +230,8 @@ def load_from_dict(values: dict[str, Any]) -> SolverConfig:
         raise ValueError("load_scan_max_iterations must be positive")
     if config.cpf_corrector_tolerance <= 0:
         raise ValueError("cpf_corrector_tolerance must be positive")
+    if not isinstance(config.cpf_all_cases, bool):
+        raise ValueError("cpf_all_cases must be boolean")
     if config.cpf_max_corrector_iterations <= 0 or config.cpf_max_steps <= 0:
         raise ValueError("CPF iteration and step limits must be positive")
     if config.cpf_post_nose_steps <= 0:
@@ -229,6 +240,8 @@ def load_from_dict(values: dict[str, Any]) -> SolverConfig:
         raise ValueError("cpf_monitor_bus cannot be negative")
     if config.cpf_tangent_angle_bus < 0:
         raise ValueError("cpf_tangent_angle_bus cannot be negative")
+    if config.cpf_local_voltage_bus < 0:
+        raise ValueError("cpf_local_voltage_bus cannot be negative")
     if config.cpf_absolute_vp_angle_bus < 0:
         raise ValueError("cpf_absolute_vp_angle_bus cannot be negative")
     if not 0 < config.cpf_tangent_angle_refinement_cos_threshold <= 1:
@@ -238,5 +251,16 @@ def load_from_dict(values: dict[str, Any]) -> SolverConfig:
     if not 0 < config.cpf_tangent_angle_refinement_min_step_ratio <= 1:
         raise ValueError(
             "cpf_tangent_angle_refinement_min_step_ratio must be in (0, 1]"
+        )
+    if not 0 <= config.cpf_tangent_angle_full_state_cos_threshold <= 1:
+        raise ValueError(
+            "cpf_tangent_angle_full_state_cos_threshold must be in [0, 1]"
+        )
+    if not isinstance(
+        config.cpf_tangent_angle_stop_at_second_lambda_turn,
+        bool,
+    ):
+        raise ValueError(
+            "cpf_tangent_angle_stop_at_second_lambda_turn must be boolean"
         )
     return config

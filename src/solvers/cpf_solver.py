@@ -11,6 +11,7 @@ from ..core.grid import PowerGrid
 from ..cpf.corrector import CorrectorResult, apply_corrector
 from ..cpf.parameter import (
     ABSOLUTE_VP_ANGLE_PARAMETERIZATION,
+    LOCAL_VOLTAGE_PARAMETERIZATION,
     NATURAL_PARAMETERIZATION,
     PSEUDO_ARCLENGTH_PARAMETERIZATION,
     TANGENT_ANGLE_PARAMETERIZATION,
@@ -70,6 +71,7 @@ class CPFResult:
     final_grid: PowerGrid
     parameterization: str
     enforce_q_limits: bool
+    local_voltage_bus: int | None
     tangent_angle_bus: int | None
     absolute_vp_angle_bus: int | None
     used_pseudo_fallback: bool
@@ -229,6 +231,30 @@ class ContinuationSolver(BaseSolver):
         return False
 
     @staticmethod
+    def _full_state_tangent_cosine(
+        grid: PowerGrid,
+        previous_tangent: CPFTangent,
+        current_tangent: CPFTangent,
+    ) -> float:
+        """计算相邻完整降维状态切向量的方向余弦。"""
+        grid.get_mismatch()
+        _, theta_indices, voltage_indices = grid.get_jacobian()
+        previous = previous_tangent.reduced_vector(
+            theta_indices,
+            voltage_indices,
+        )
+        current = current_tangent.reduced_vector(
+            theta_indices,
+            voltage_indices,
+        )
+        denominator = float(
+            np.linalg.norm(previous) * np.linalg.norm(current)
+        )
+        if not np.isfinite(denominator) or denominator <= 0.0:
+            raise ValueError("完整状态切向量范数无效")
+        return float(np.dot(previous, current) / denominator)
+
+    @staticmethod
     def _detect_first_nose_index(
         points: list[CPFPoint],
     ) -> int | None:
@@ -255,6 +281,28 @@ class ContinuationSolver(BaseSolver):
         ):
             return len(points) - 2
         return None
+
+    @staticmethod
+    def _is_second_lambda_turn(
+        points: list[CPFPoint],
+        next_lambda: float,
+        nose_index: int | None,
+    ) -> bool:
+        """判断首个鼻点之后是否将出现第二次 λ 方向反转。"""
+        if nose_index is None or len(points) < nose_index + 2:
+            return False
+        previous_delta = (
+            points[-1].lambda_value - points[-2].lambda_value
+        )
+        next_delta = float(next_lambda) - points[-1].lambda_value
+        scale = max(
+            1.0,
+            abs(points[-2].lambda_value),
+            abs(points[-1].lambda_value),
+            abs(float(next_lambda)),
+        )
+        tolerance = 1e-10 * scale
+        return previous_delta < -tolerance and next_delta > tolerance
 
     def _refine_angle_step(
         self,
@@ -370,6 +418,15 @@ class ContinuationSolver(BaseSolver):
             final_grid=final_grid,
             parameterization=self.params.parameterization,
             enforce_q_limits=self.params.enforce_q_limits,
+            local_voltage_bus=(
+                int(
+                    final_grid.buses[
+                        self._active_local_voltage_bus_index
+                    ]["number"]
+                )
+                if self._active_local_voltage_bus_index is not None
+                else None
+            ),
             tangent_angle_bus=(
                 int(
                     final_grid.buses[
@@ -418,6 +475,7 @@ class ContinuationSolver(BaseSolver):
         parameter_state = self.params.create_state()
         self._active_tangent_angle_bus_index: int | None = None
         self._active_absolute_vp_angle_bus_index: int | None = None
+        self._active_local_voltage_bus_index: int | None = None
         self._used_pseudo_fallback = False
         self._detected_nose_index: int | None = None
         current_grid = grid.clone()
@@ -545,6 +603,9 @@ class ContinuationSolver(BaseSolver):
                 self._active_tangent_angle_bus_index = (
                     parameter_state.tangent_angle_bus_index
                 )
+                self._active_local_voltage_bus_index = (
+                    parameter_state.local_voltage_bus_index
+                )
                 self._active_absolute_vp_angle_bus_index = (
                     parameter_state.absolute_vp_angle_bus_index
                 )
@@ -591,6 +652,57 @@ class ContinuationSolver(BaseSolver):
                     failed_attempts,
                     current_grid,
                 )
+
+            if (
+                parameter_state.active_parameterization
+                == TANGENT_ANGLE_PARAMETERIZATION
+                and previous_tangent is not None
+                and self.params.tangent_angle_full_state_cos_threshold > 0.0
+            ):
+                try:
+                    state_cosine = self._full_state_tangent_cosine(
+                        current_grid,
+                        previous_tangent,
+                        predictor.tangent,
+                    )
+                except ValueError:
+                    state_cosine = float("-inf")
+                threshold = (
+                    self.params.tangent_angle_full_state_cos_threshold
+                )
+                if state_cosine < threshold:
+                    failed_attempts += 1
+                    reason = (
+                        "相邻完整状态切线方向突变："
+                        f"cos={state_cosine:.6f} < {threshold:.6f}"
+                    )
+                    if self._can_fallback_to_pseudo(parameter_state):
+                        parameter_state.active_parameterization = (
+                            PSEUDO_ARCLENGTH_PARAMETERIZATION
+                        )
+                        parameter_state.retry_count = 0
+                        self._used_pseudo_fallback = True
+                        fallback = StepControlResult(
+                            previous_step=parameter_state.step_size,
+                            new_step=parameter_state.step_size,
+                            action="fallback",
+                            should_retry=True,
+                            retry_count=0,
+                            reason=reason + "，切换为伪弧长参数化",
+                        )
+                        decisions.append(fallback)
+                        if self.verbose:
+                            print(f"CPF 分支保护: {fallback.reason}")
+                        continue
+                    return self._finish(
+                        points,
+                        decisions,
+                        False,
+                        reason,
+                        start_time,
+                        failed_attempts,
+                        current_grid,
+                    )
 
             refinement = self._refine_angle_step(
                 current_grid,
@@ -644,6 +756,29 @@ class ContinuationSolver(BaseSolver):
                     current_grid,
                 )
 
+            if (
+                self.params.parameterization
+                == TANGENT_ANGLE_PARAMETERIZATION
+                and self.params.tangent_angle_stop_at_second_lambda_turn
+                and self._is_second_lambda_turn(
+                    points,
+                    corrector.lambda_value,
+                    self._detected_nose_index,
+                )
+            ):
+                return self._finish(
+                    points,
+                    decisions,
+                    True,
+                    (
+                        "检测到首个鼻点后的第二次 λ 换向，"
+                        "已在换向前终止单鼻点曲线"
+                    ),
+                    start_time,
+                    failed_attempts,
+                    current_grid,
+                )
+
             parameter_state.accept(corrector.lambda_value)
             current_grid = corrector.grid
             previous_tangent = predictor.tangent
@@ -672,6 +807,7 @@ class ContinuationSolver(BaseSolver):
             if (
                 self.params.parameterization
                 in {
+                    LOCAL_VOLTAGE_PARAMETERIZATION,
                     PSEUDO_ARCLENGTH_PARAMETERIZATION,
                     TANGENT_ANGLE_PARAMETERIZATION,
                     ABSOLUTE_VP_ANGLE_PARAMETERIZATION,

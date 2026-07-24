@@ -38,6 +38,10 @@ latexmk -xelatex "-outdir=../build" main.tex
 
 生成的 PDF 位于 `Latex/build/main.pdf`。辅助文件也集中在 `build/`，不会污染正文目录。
 
+请不要只对 `main.tex` 单独运行一遍 `xelatex`：交叉引用需要至少两遍编译，第一遍中
+`\ref{...}` 可能显示为 `??`。`latexmk` 会自动判断并完成所需的多遍 XeLaTeX/BibTeX
+编译。VS Code 的 LaTeX Workshop 已配置为默认使用上述 `latexmk (XeLaTeX)` 配方。
+
 清理编译产物：
 
 ```powershell

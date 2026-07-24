@@ -1,30 +1,198 @@
 \section{潮流求解方法}
 \label{sec:methods}
 
-\subsection{牛顿--拉夫逊法}
+\subsection{牛顿--拉夫逊法（NR）}
 
-牛顿--拉夫逊法是潮流方程的经典求解方法\cite{tinney1967}，在每轮迭代中求解
+牛顿--拉夫逊法是求解非线性潮流方程的经典方法\cite{tinney1967}。
+在第 $k$ 次迭代中，首先计算功率失配向量
+$\bm{f}(\bm{x}^{(k)})$，并在当前运行点对潮流方程作一阶线性化：
 \begin{equation}
-\bm{J}(\bm{x}^{(k)})\Delta\bm{x}^{(k)}=-\bm{f}(\bm{x}^{(k)}),\qquad
-\bm{x}^{(k+1)}=\bm{x}^{(k)}+\Delta\bm{x}^{(k)}.
+\bm{J}(\bm{x}^{(k)})\Delta\bm{x}^{(k)}
+=-\bm{f}(\bm{x}^{(k)}),
+\qquad
+\bm{x}^{(k+1)}=\bm{x}^{(k)}+\Delta\bm{x}^{(k)},
+\label{eq:nr-iteration}
 \end{equation}
-当初值接近非奇异解时，该方法通常具有二次收敛特征，但每轮需要重新构造并分解雅可比矩阵。
-
-\subsection{快速解耦潮流法}
-
-快速解耦法利用 $P$--$\theta$ 与 $Q$--$V$ 的主导耦合关系\cite{stott1974}，将迭代近似分解为
+其中，$\bm{J}=\partial\bm{f}/\partial\bm{x}$ 为潮流雅可比矩阵，
+通常可写成
 \begin{equation}
-\bm{B}'\Delta\bm{\theta}=\Delta\bm{P}/\bm{V},\qquad
-\bm{B}''\Delta\bm{V}=\Delta\bm{Q}/\bm{V}.
+\bm{J}=
+\begin{bmatrix}
+\partial\bm{P}/\partial\bm{\theta} &
+\partial\bm{P}/\partial\bm{V}\\
+\partial\bm{Q}/\partial\bm{\theta} &
+\partial\bm{Q}/\partial\bm{V}
+\end{bmatrix}.
 \end{equation}
-固定系数矩阵可以预先分解，因此单轮成本低；但高 $R/X$、强耦合或临界工况会削弱其近似条件。
 
-\subsection{全局化方法与连续潮流}
+当初值位于目标解的吸引域内且解处雅可比矩阵非奇异时，
+NR 法在解附近通常具有二次收敛特征。
+当系统接近静态电压稳定极限时，雅可比矩阵条件数迅速增大，
+线性方程的求解误差和状态修正量均可能被放大，
+从而导致收敛速度下降、迭代振荡，甚至数值发散。
 
-最优乘子法在牛顿方向上搜索合适步长，非线性规划法最小化 $\tfrac12\|\bm{f}(\bm{x})\|_2^2$。它们可以抑制迭代发散，但也可能停在非零残差的最小二乘点。
+\subsection{快速解耦潮流法（FDLF）——PQ分解法}
 
-连续潮流法采用预测--校正策略跟踪 $\bm{f}(\bm{x},\lambda)=\bm{0}$ 的解流形\cite{ajjarapu1992}，并在鼻点附近使用局部或伪弧长等参数化绕开自然参数化的奇异。项目当前支持自然、伪弧长、切线角和绝对 $V/P$ 角参数化。
+快速解耦潮流法利用输电网络中
+$P$--$\theta$ 与 $Q$--$V$ 耦合占主导的特点\cite{stott1974}。
+在电压幅值接近 $1$~p.u.、支路相角差较小且线路电抗明显大于电阻的条件下，
+可忽略 $P$--$V$ 与 $Q$--$\theta$ 的次要耦合项，将潮流修正方程近似分解为
+\begin{equation}
+\bm{B}'\Delta\bm{\theta}
+=\Delta\bm{P}/\bm{V},
+\qquad
+\bm{B}''\Delta\bm{V}
+=\Delta\bm{Q}/\bm{V}.
+\label{eq:fdlf-iteration}
+\end{equation}
 
-\subsection{方法之间的定位关系}
+矩阵 $\bm{B}'$ 与 $\bm{B}''$ 在迭代过程中保持不变，
+因此可在求解开始时完成分解，并在后续迭代中重复使用。
+显著降低了单轮计算成本，但代价为近似线性收敛，通常需要更多迭代才能达到相同精度。
+在高 $R/X$ 支路、重载或临界工况下，解耦近似的精度显著下降，可能收敛缓慢甚至发散。
 
-NR 与 FDLF 用于求取给定参数下的离散运行点；最优乘子和非线性规划用于改善定点求解过程的全局性；CPF 则用于追踪随负荷参数连续变化的解分支。前三类方法回答“当前运行点能否求出”，CPF 回答“运行点如何随参数演化并在何处达到极限”。因此，算法比较不能只比较耗时，还应同时报告最终残差、步长控制量、无功限值状态和所处解支。
+\subsection{最优乘子法与非线性规划法}
+
+最优乘子法保留 NR 法给出的搜索方向
+$\Delta\bm{x}_{\mathrm{N}}^{(k)}$，但不直接采用完整牛顿步，
+而是在该方向上选择能够充分降低残差目标函数的乘子 $\mu_k$：
+\begin{equation}
+\bm{x}^{(k+1)}
+=\bm{x}^{(k)}+\mu_k\Delta\bm{x}_{\mathrm{N}}^{(k)}.
+\qquad
+\Phi(\bm{x})=\frac{1}{2}\left\|\bm{f}(\bm{x})\right\|_2^2,
+\label{eq:om-iteration}
+\end{equation}
+当完整牛顿步造成残差增大时，$\mu_k<1$ 可以限制修正幅度，
+降低迭代越出有效区域的风险。
+
+非线性规划法则将潮流求根问题改写为
+\begin{equation}
+\min_{\bm{x}}\ \Phi(\bm{x})
+=\frac{1}{2}\left\|\bm{f}(\bm{x})\right\|_2^2,
+\label{eq:nlp-objective}
+\end{equation}
+并结合线搜索或正则化策略控制迭代步长。
+
+上述方法能够抑制状态变量和残差的无界增长，扩大算法相对于标准 NR 法的有效收敛范围，
+但不能改变原潮流方程是否存在实数根。
+
+\pagebreak[3]
+特别地，当潮流方程无解、雅可比矩阵严重病态，或算法进入非零局部极小点时，目标函数的驻点仅要求
+\begin{equation}
+\nabla\Phi(\bm{x})
+=\bm{J}(\bm{x})^{\mathsf T}\bm{f}(\bm{x})=\bm{0},
+\label{eq:least-squares-stationary}
+\end{equation}
+并不必然意味着 $\bm{f}(\bm{x})=\bm{0}$。
+OM 的乘子可能持续缩小，非线性规划法的线搜索步长也可能趋近于零；
+此时状态变量不再明显变化，但功率失配仍高于规定阈值。
+这种现象应判定为\textbf{非零残差停滞}，而不是潮流收敛。
+因此，评价方法时必须同时检查最终残差与终止控制量，
+不能仅依据“算法稳定停止”判断求解成功。
+
+\subsection{连续潮流法（CPF）}
+
+连续潮流法\cite{ajjarapu1992}通过引入延拓参数 $\lambda$ 和附加参数化方程，
+在原潮流方程中的雅可比矩阵奇异问题，在扩展潮流方程中因灵活的参数化方程设置可能而被绕开，
+从而可以沿着解流形追踪甚至越过鞍结分岔点，判断静态稳定极限。
+
+连续潮流的工作主要分为：预测步、校正步和参数化，
+
+本报告实现了五种参数化方法：
+
+\begin{enumerate}
+  \item \textbf{自然参数化（Natural）：}
+  固定 $\lambda$ 为常数，即 $\lambda-\lambda^{\text{pred}}=0$。
+  在远离鼻点时简单高效，但在鼻点附近雅可比扩展矩阵趋于奇异，校正无法收敛。
+  此时的校正步称为垂直校正，每一次迭代为固定的 $\Delta \lambda$ 步长。
+
+  \item \textbf{局部电压参数化（Local Voltage）：}
+  选定一个 PQ 节点 $k$，以其电压幅值 $V_k$ 代替负荷参数 $\lambda$
+  作为局部延拓坐标，并规定预测步沿该节点的低电压方向前进。若状态向量写为
+  $\bm{x}=[\bm{\theta}^{\mathsf T},\bm{V}^{\mathsf T}]^{\mathsf T}$，
+  $\bm{e}_k$ 表示从状态向量中选取 $V_k$ 的行向量，则预测切向量由
+  \begin{equation}
+    \begin{bmatrix}
+      J(\bm{x},\lambda) & F_\lambda(\bm{x},\lambda) \\
+      \bm{e}_k^{\mathsf T} & 0
+    \end{bmatrix}
+    \begin{bmatrix}
+      \bm{t}_x \\ t_\lambda
+    \end{bmatrix}
+    =
+    \begin{bmatrix}
+      \bm{0} \\ -1
+    \end{bmatrix}
+  \end{equation}
+  确定。末行给出 $\mathrm{d}V_k/\mathrm{d}s=-1$，因此步长为
+  $\Delta s>0$ 时，预测点满足
+  \begin{equation}
+    \bm{x}^{\mathrm{pred}}=\bm{x}+\Delta s\,\bm{t}_x,
+    \qquad
+    \lambda^{\mathrm{pred}}=\lambda+\Delta s\,t_\lambda,
+    \qquad
+    V_k^{\mathrm{pred}}=V_k-\Delta s.
+  \end{equation}
+  校正阶段不再固定 $\lambda$，而是固定预测节点电压，附加约束为
+  \begin{equation}
+    g(\bm{x},\lambda)=V_k-V_k^{\mathrm{pred}}=0,
+  \end{equation}
+  相应的增广 Newton 方程为
+  \begin{equation}
+    \begin{bmatrix}
+      J & F_\lambda \\
+      \bm{e}_k^{\mathsf T} & 0
+    \end{bmatrix}
+    \begin{bmatrix}
+      \Delta\bm{x} \\ \Delta\lambda
+    \end{bmatrix}
+    =-
+    \begin{bmatrix}
+      F(\bm{x},\lambda) \\ V_k-V_k^{\mathrm{pred}}
+    \end{bmatrix}.
+  \end{equation}
+  由于 $\lambda$ 可在校正中自由变化，该方法能够在鼻点处随解支转向，并继续追踪
+  低电压分支。程序允许直接指定节点 $k$；未指定时，在基准点自动选取
+  \begin{equation}
+    k=\arg\max_{i\in\mathcal{N}_{PQ}}
+    \left|\frac{\mathrm{d}V_i}{\mathrm{d}\lambda}\right|,
+  \end{equation}
+  即电压对负荷增长最敏感的 PQ 节点。该方法结构简单且适合主要表现为局部电压下降的
+  场景，但若选定节点不能持续表征解支转向，或在故障、非均匀负荷增长下灵敏节点发生
+  改变，增广方程仍可能失去良好条件。
+
+  \item \textbf{弧长参数化：}
+  以 $V-P$ 曲线的弧长为参数化，
+  约束解点沿切向量的超平面移动：
+  \begin{equation}
+    \bm{t}^T\begin{bmatrix}\bm{x}-\bm{x}^{\text{pred}}\\\lambda-\lambda^{\text{pred}}\end{bmatrix}=0.
+  \end{equation}
+  本文以切线超平面约束近似真实曲线弧长，并将这一离散实现统一简称为弧长法。
+  通过引入弧长约束避免了自然参数化在鼻点的奇异问题，可平滑越过鼻点。
+  但无法有效在鼻点附近加密。
+
+  \item \textbf{切线角参数化：}
+  以 $(\bm{\theta}-\bm{\theta}^{\text{pred}})^T\bm{t}_\theta$ 与 $\Delta\lambda$ 的夹角为参数化，
+  更有效地判断鼻点并有效加密，防止发生迭代过程中鼻点误判断导致迭代反向。
+
+  \item \textbf{绝对 $V/P$ 角参数化：}
+  以 $V$--$P$ 空间中 PV 曲线切线与 $P$ 轴夹角为参数化，
+  更有效稳定地越过鼻点，避免了进入错误的低电压解分支。
+
+\end{enumerate}
+% 另外还有论文中的有功损耗参数化，绝对角度参数化即论文《基于连续潮流的电力系统电压稳定性研究》的新方法。
+
+\subsection{方法定位与评价指标}
+
+NR 与 FDLF 用于求取给定负荷参数下的离散运行点；
+OM 与非线性规划法用于改善定点求解过程的数值稳定性；
+CPF 则用于追踪运行点随负荷参数变化的连续轨迹，并定位静态电压稳定极限。
+因此，前三类方法主要回答“给定工况能否求得满足精度要求的潮流解”，
+CPF 进一步回答“解如何随负荷演化，以及在何处达到极限”。
+
+因此，算法比较不能只对比耗时和迭代次数，
+还应同时报告最终残差、观测收敛阶、步长或乘子变化、能否越过鼻点以及所处解支。
+对于不收敛的情形，
+需分层判断是物理解不存在（CPF 无解支）、吸引域不足（换初值/换算法可解），
+还是数值过程失控（步长控制或正则化可修复）。

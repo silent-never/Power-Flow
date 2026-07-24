@@ -42,6 +42,115 @@ class PFPlotter:
         print(f"[绘图] 图像已保存至: {file_path}")
         return file_path
 
+    def plot_accuracy_by_case(
+        self,
+        results,
+        *,
+        save_name="IEEE_All_Cases_Deviation_vs_Node_Count.png",
+    ):
+        """按等间距算例位置绘制 NR 方程残差与收敛容差。"""
+        if not results:
+            return None
+
+        positions = np.arange(len(results))
+        labels = [str(item.node_count) for item in results]
+        active = np.asarray(
+            [max(item.max_active_mismatch, 1e-16) for item in results],
+            dtype=float,
+        )
+        reactive = np.asarray(
+            [max(item.max_reactive_mismatch, 1e-16) for item in results],
+            dtype=float,
+        )
+        tolerances = np.asarray([item.tolerance for item in results], dtype=float)
+
+        fig, axis = plt.subplots(figsize=(12, 6), constrained_layout=True)
+        axis.semilogy(
+            positions,
+            active,
+            marker="o",
+            linewidth=2,
+            label="最大有功失配",
+        )
+        axis.semilogy(
+            positions,
+            reactive,
+            marker="s",
+            linewidth=2,
+            label="最大 PQ 节点无功失配",
+        )
+        axis.semilogy(
+            positions,
+            tolerances,
+            linestyle="--",
+            linewidth=1.8,
+            color="#d62728",
+            label="收敛容差",
+        )
+        axis.set_title("IEEE 3--300 节点系统 NR 方程残差--节点数校核", fontsize=15)
+        axis.set_ylabel("最大功率失配 (p.u.，对数坐标)", fontsize=11)
+        axis.set_xlabel("节点数（各算例等间距排列）", fontsize=11)
+        axis.set_xticks(positions)
+        axis.set_xticklabels(labels)
+        axis.grid(True, which="both", linestyle="--", alpha=0.5)
+        axis.legend(fontsize=10)
+        return self._save_figure(fig, save_name)
+
+    def plot_accuracy_by_tolerance(
+        self,
+        results,
+        *,
+        save_name="IEEE_118_Deviation_vs_Convergence_Tolerance.png",
+    ):
+        """绘制 118 节点 NR 方程残差随设定收敛精度的变化。"""
+        if not results:
+            return None
+
+        positions = np.arange(len(results))
+        tolerances = np.asarray([item.tolerance for item in results], dtype=float)
+        labels = [f"{value:.0e}" for value in tolerances]
+        active = np.asarray(
+            [max(item.max_active_mismatch, 1e-16) for item in results],
+            dtype=float,
+        )
+        reactive = np.asarray(
+            [max(item.max_reactive_mismatch, 1e-16) for item in results],
+            dtype=float,
+        )
+
+        fig, axis = plt.subplots(figsize=(10, 6), constrained_layout=True)
+        axis.semilogy(
+            positions,
+            active,
+            marker="o",
+            linewidth=2,
+            label="最大有功失配",
+        )
+        axis.semilogy(
+            positions,
+            reactive,
+            marker="s",
+            linewidth=2,
+            label="最大 PQ 节点无功失配",
+        )
+        axis.semilogy(
+            positions,
+            tolerances,
+            marker="x",
+            linestyle="--",
+            linewidth=1.8,
+            color="#d62728",
+            label="设定收敛精度",
+        )
+        axis.set_title("IEEE 118 节点系统 NR 残差--收敛精度校核", fontsize=15)
+        axis.set_xlabel("设定收敛精度（等间距排列）", fontsize=11)
+        axis.set_ylabel("最大功率失配 (p.u.，对数坐标)", fontsize=11)
+        axis.set_xticks(positions)
+        axis.set_xticklabels(labels)
+        axis.grid(True, which="both", linestyle="--", alpha=0.5)
+        axis.legend(fontsize=10)
+        return self._save_figure(fig, save_name)
+
     def _set_x_ticks(self, ax, x_values, x_labels=None):
         """按等间距位置设置横轴刻度，并可显示真实节点编号。"""
         x_values = np.asarray(x_values)
@@ -1323,6 +1432,127 @@ class PFPlotter:
         control_axis.set_title("失败时乘子或回溯步长趋零", fontsize=14)
         control_axis.set_ylabel("终止控制量（对数坐标）", fontsize=11)
         control_axis.legend(fontsize=8)
+
+        return self._save_figure(fig, save_name)
+
+    def plot_advanced_stagnation_boundaries(
+        self,
+        result,
+        save_name="Solver_118_OM_NLP_Stagnation_Boundaries.png",
+    ):
+        """绘制最优乘子法和非线性规划法的收敛—停滞边界。"""
+        solver_specs = (
+            ("Optimal Multiplier", "最优乘子法", "#2ca02c", "s"),
+            ("Nonlinear Programming", "非线性规划法", "#9467bd", "D"),
+        )
+        fig, (state_axis, residual_axis) = plt.subplots(
+            1,
+            2,
+            figsize=(14, 5.5),
+            constrained_layout=True,
+        )
+
+        for solver_index, (solver_name, label, color, marker) in enumerate(
+            solver_specs
+        ):
+            points = list(result.points_for(solver_name))
+            if not points:
+                continue
+            multipliers = np.asarray(
+                [item.load_multiplier for item in points], dtype=float
+            )
+            converged = np.asarray(
+                [
+                    item.success
+                    and np.isfinite(item.final_error)
+                    and item.final_error < result.tolerance
+                    for item in points
+                ],
+                dtype=bool,
+            )
+            states = 100.0 * converged.astype(float)
+            residuals = np.asarray(
+                [
+                    max(item.final_error, 1e-16)
+                    if np.isfinite(item.final_error)
+                    else np.nan
+                    for item in points
+                ],
+                dtype=float,
+            )
+            state_axis.plot(
+                multipliers,
+                states,
+                marker=marker,
+                linewidth=1.7,
+                color=color,
+                label=label,
+            )
+            residual_axis.semilogy(
+                multipliers,
+                residuals,
+                marker=marker,
+                linewidth=1.7,
+                color=color,
+                label=label,
+            )
+            failed = ~converged
+            if np.any(failed):
+                residual_axis.scatter(
+                    multipliers[failed],
+                    residuals[failed],
+                    marker="x",
+                    s=75,
+                    linewidth=2,
+                    color=color,
+                    zorder=5,
+                )
+
+            boundary = result.boundary_for(solver_name)
+            if boundary is not None:
+                low, high = boundary.bracket
+                for axis in (state_axis, residual_axis):
+                    axis.axvspan(low, high, color=color, alpha=0.12)
+                    axis.axvline(low, color=color, linestyle="--", linewidth=1.3)
+                    axis.axvline(high, color=color, linestyle=":", linewidth=1.5)
+                state_axis.text(
+                    0.5 * (low + high),
+                    62.0 - 24.0 * solver_index,
+                    f"{label}\n[{low:.6f}, {high:.6f}]",
+                    ha="center",
+                    va="center",
+                    fontsize=8,
+                    color=color,
+                )
+
+        for axis in (state_axis, residual_axis):
+            axis.axvline(
+                result.cpf_nose_multiplier,
+                color="#d62728",
+                linestyle="-.",
+                linewidth=1.5,
+                label="CPF 鼻点" if axis is state_axis else None,
+            )
+            axis.set_xlabel("统一负荷倍数", fontsize=11)
+            axis.grid(True, which="both", linestyle="--", alpha=0.45)
+
+        state_axis.set_title("收敛—非零残差停滞边界", fontsize=14)
+        state_axis.set_ylabel("严格收敛率", fontsize=11)
+        state_axis.set_yticks([0.0, 100.0])
+        state_axis.yaxis.set_major_formatter(PercentFormatter(100.0))
+        state_axis.set_ylim(-12.0, 112.0)
+        state_axis.legend(fontsize=8, loc="best")
+
+        residual_axis.axhline(
+            result.tolerance,
+            color="#666666",
+            linestyle="--",
+            linewidth=1.4,
+            label=f"残差阈值 {result.tolerance:.0e}",
+        )
+        residual_axis.set_title("最终潮流残差（叉号表示失败/停滞）", fontsize=14)
+        residual_axis.set_ylabel("最大功率失配", fontsize=11)
+        residual_axis.legend(fontsize=8, loc="best")
 
         return self._save_figure(fig, save_name)
 

@@ -108,3 +108,13 @@ Power_Flow_Pro/
 当前状态：Newton-Raphson 基础潮流、快速解耦法 (XB scheme)、最优乘子法、非线性最小二乘规划法、IEEE 数据解析、基础报表、PF 绘图、统一负荷倍率扫描和 CPF 连续潮流全套预测—校正均已可用。
 TensorSolver 仍为待实现接口。
 
+NR 跨算例与跨精度偏差校核可单独运行：
+
+```powershell
+python -m src.saves.main_accuracy_validation
+```
+
+该命令遍历 `data/*ieee.txt`，生成等间距算例横坐标的残差--节点数图、
+IEEE 118 残差--收敛精度图，以及对应的 CSV 明细表。输出分别位于
+`output/plots/` 和 `output/tables/`。
+

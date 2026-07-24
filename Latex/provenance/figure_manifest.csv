@@ -3,5 +3,12 @@ Solver_All_Cases_Summary.png,legacy-output-import,output/plots/Solver_All_Cases_
 Solver_118_NR_FDLF_Comparison.png,legacy-output-import,output/plots/Solver_118_NR_FDLF_Comparison.png,unknown,unknown,当前报告使用的118节点详细比较图
 Solver_118_Robustness.png,legacy-output-import,output/plots/Solver_118_Robustness.png,unknown,unknown,当前报告使用的鲁棒性分析图
 Solver_118_Critical_Stagnation.png,legacy-output-import,output/plots/Solver_118_Critical_Stagnation.png,unknown,unknown,当前报告使用的临界停滞分析图
+Solver_118_OM_NLP_Stagnation_Boundaries.png,critical-stagnation-refinement,output/plots/Solver_118_OM_NLP_Stagnation_Boundaries.png,unknown,config.yaml,IEEE 118节点OM与NLP严格收敛和非零残差停滞边界
 Solver_Scaling_Trend.png,legacy-output-import,output/plots/Solver_Scaling_Trend.png,unknown,unknown,当前报告使用的规模增长趋势图
-
+IEEE_01_Voltage_Comparison.png,current-output-import,output/plots/IEEE_01_Voltage_Comparison.png,unknown,config.yaml,NR计算电压与标准结果比较
+IEEE_02_Angle_Comparison.png,current-output-import,output/plots/IEEE_02_Angle_Comparison.png,unknown,config.yaml,NR计算相角与标准结果比较
+IEEE_03_Active_Power_Comparison.png,current-output-import,output/plots/IEEE_03_Active_Power_Comparison.png,unknown,config.yaml,NR计算有功与指定值比较
+IEEE_04_Reactive_NonPQ_Comparison.png,current-output-import,output/plots/IEEE_04_Reactive_NonPQ_Comparison.png,unknown,config.yaml,NR非PQ节点无功与标准值比较
+IEEE_All_Cases_Deviation_vs_Node_Count.png,accuracy-validation,output/plots/IEEE_All_Cases_Deviation_vs_Node_Count.png,unknown,config.yaml,NR全部已有算例方程残差与节点数校核
+IEEE_118_Deviation_vs_Convergence_Tolerance.png,accuracy-validation,output/plots/IEEE_118_Deviation_vs_Convergence_Tolerance.png,unknown,config.yaml,NR在118节点不同收敛精度下的方程残差校核
+CPF_118_Parameterization_Comparison.png,cpf-parameterization-comparison,output/plots/CPF_118_Parameterization_Comparison.png,unknown,config.yaml,IEEE 118节点五种CPF参数化的统一轨迹与计算过程比较

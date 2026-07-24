@@ -1,0 +1,11 @@
+# 本目录只保存 LaTeX 源码；编译产物统一写入 ../build/。
+main.aux
+main.bbl
+main.blg
+main.fdb_latexmk
+main.fls
+main.log
+main.out
+main.pdf
+main.synctex.gz
+main.xdv
